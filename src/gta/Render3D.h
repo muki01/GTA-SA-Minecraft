@@ -22,7 +22,6 @@ struct ChunkMesh {
     std::vector<uint8_t> tanim;
 };
 
-void BuildChunkMesh(Chunk& c);
 void Render3D(); // the mod's 3D world (called before GTA draws its vehicles)
 bool Render3DHooked(); // false: the hook failed, Render3D runs after the scene instead
 void Render3DInit(); // logs what the depth buffer can do

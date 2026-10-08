@@ -61,6 +61,8 @@ struct Host {
     virtual bool Raining() { return false; }                                 // rain puts fires out
     virtual bool Outdoors() { return true; }                                 // not inside one of its buildings
     virtual bool SpawnGround(const Vec3& from, Vec3* ground) { return false; } // a spot below `from` where animals may appear
+    // the cell is its own ground that was dug out (drawn only through its holes); *depthShade: darker deeper down
+    virtual bool OwnGround(const Int3& c, float* depthShade) { return false; }
     // ---- what the player looks at
     // Something of the host's along the ray (`blocks`: what the ray hits among our blocks). True when the host
     // decided: `out` is its thing, or stays invalid because nothing is within reach. False: the block it is, if any.

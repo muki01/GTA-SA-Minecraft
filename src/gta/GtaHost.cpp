@@ -72,6 +72,12 @@ struct GtaHost : Host {
     }
     bool CellBlocked(const Int3& c) override { return GtaCellBlocked(c); }
     bool Outdoors() override { return CGame::currArea == 0; }
+    bool OwnGround(const Int3& c, float* depthShade) override {
+        if (!TerrainOwnsCell(c.x, c.y, c.z))
+            return false;
+        *depthShade = TerrainDepthShade(c.x, c.y, c.z);
+        return true;
+    }
     bool Raining() override { return Outdoors() && CWeather::Rain > 0.2f; }
     bool SpawnGround(const Vec3& from, Vec3* ground) override {
         CVector out;

@@ -90,11 +90,4 @@ void UnloadTextures() {
     Free(gMenuTex);
 }
 
-TileUV AtlasTileUV(int tile) {
-    const float ts = 16.0f / ATLAS_SIZE;
-    const float inset = 0.02f / ATLAS_SIZE;
-    int tx = tile % ATLAS_TILES_PER_ROW, ty = tile / ATLAS_TILES_PER_ROW;
-    return { tx * ts + inset, ty * ts + inset, (tx + 1) * ts - inset, (ty + 1) * ts - inset };
-}
-
 } // namespace mc

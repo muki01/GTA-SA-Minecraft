@@ -2,6 +2,8 @@
 
 #include "ModCommon.h"
 
+#include "BlockMesh.h"
+
 struct RwTexture;
 struct RwRaster;
 
@@ -27,7 +29,5 @@ bool LoadTextures();
 void UnloadTextures();
 
 // atlas UVs for a 16px tile (small inset avoids bleeding with point sampling)
-struct TileUV { float u0, v0, u1, v1; };
-TileUV AtlasTileUV(int tile);
 
 } // namespace mc
