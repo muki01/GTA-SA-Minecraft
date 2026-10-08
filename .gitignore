@@ -1,0 +1,16 @@
+# Build output
+build/
+tools/d3dtest/b/
+*.asi
+*.pdb
+
+# Minecraft's own files (textures, sounds, models, language files) belong to Mojang and are not shipped here.
+# Every player extracts them from their own copy of Minecraft; tools/gen_assets.py turns them into assets/.
+minecraft-assets-*/
+assets/
+
+# Editors and tools
+.vs/
+.vscode/
+*.user
+__pycache__/

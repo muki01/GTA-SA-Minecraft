@@ -1,0 +1,270 @@
+GTA San Andreas - Minecraft Modu (surum 0.13)
+============================================
+Orijinal Minecraft dokulari, sesleri, modelleri, Turkce isimleri ve tarifleri kullanilir:
+410 blok, 390 esya, 543 tarif.
+
+0.13 SURUMUNDE YENILER
+  - Kirilan yerlerde havada kalan ince cizgiler temizlendi (yan yana kirilan hucrelerin
+    arasinda kalan ince kenar seritleri ve kesim sinirina denk gelen GTA parcalari).
+  - Delik icindeki bloklarin dokusu duzeldi: her hucrede bir tam blok dokusu, duvarlarda dik
+    (eskiden dokunun bir kenari uzayip garip goruntu veriyordu ve bazi yuzlerde yan yatiyordu).
+  - Binalarin ici sade bloklardan: tahta tahta, cam cam, tugla tugla kalir; boya / siva / garip
+    taslar en yakin renkteki tas, beton veya kum tasi olur. Toprak yerlerin ici toprak.
+
+0.12 SURUMUNDE GELENLER
+  - BINA KIRMA YENI YONTEM ("kesit kapama", CAD programlarindaki gibi): kirdigin yerde GTA
+    modeli kesilir ve deligin duvarlari, modelin ici neredeyse orasi blok dokusuyla kapatilir.
+    Bu yuzeyler SADECE deligin icinden gorunur; evin disindan hicbir yarim duvar gorunmez.
+    Hangi yerin dolu oldugu artik kirilan yuzeyden etkilenmez (eskiden altindaki blogu kirinca
+    "ustunde zemin yok" sanip bosluga dusuruyordu). Bazi duvar dokulari yanlislikla yok
+    sayiliyordu, o da duzeldi.
+  - Arabada 1. sahista nisan: attigin sey artik tam nisangahin oldugu yere gider.
+  - Araba camindan bakinca insanlar (koyluler), bloklar, hayvanlar artik gorunur.
+
+0.11 SURUMUNDE GELENLER
+  - KIRMA ARTIK GORUNEN GTA MODELINE BAKAR: neyin dolu oldugu, duvarin / koprunun / yolun ne
+    kadar kalin oldugu GTA'nin ekranda gorunen modelinden olculur (eskiden gorunmeyen carpisma
+    modeline bakiliyordu, o yuzden bosluklar ve seffaf yerler kaliyordu). Deligin etrafi ceyrek
+    blok hassasiyetinde YARIM BLOKLARLA doldurulur: yatay, dikey, ince, kalin, egimli yerlerde
+    basamakli. Delikten gorunen bos yerler (iki hucre derinlige kadar) de doldurulur.
+  - KOPRU: koprunun yolu artik "zemin" sayilmaz. Kopru ne kadar kalinsa o kadar kirilir, sonra
+    asagi dusersin. Koprunun altinda havada gorunmez bloklar olusmaz.
+  - TNT binanin yanina konunca da binayi patlatir (cati / bina tabani artik zemin sanilmiyor).
+  - Bitkilerin (agac, cali) oldugu yerde patlama / kazma ile havada bloklar olusmaz.
+  - YOLUN INCE KATMANI: yolun / zeminin altindaki bloklari kazinca ustteki ince GTA katmani
+    artik kirilmaz, altindan ince bir blok olarak gorunur. Onu ayrica kirabilirsin.
+  - Cukur kenarlari GTA zemininin gercek yuksekligini takip eder (kaldirim kenarinda tasma yok).
+  - FIRLATMA / ATIS: arabada, ucarken ya da 3. sahista attigin sey nisangahin gosterdigi yere
+    gider (dususu de hesaba katilir). Yururken, ucarken, arabada SENIN hizini alir.
+
+0.10 SURUMUNDE GELENLER
+  - BINA KIRMA DAHA DOGRU: kirdigin yerin arkasinda ne kadar blok olacagi artik GTA modelinin
+    gercek kalinligina bakilarak bulunur. Ince duvar / beton cit kirilinca yanlarda kalin
+    bloklar olusmaz, duvar ne kadar inceyse kenar parcasi da o kadar ince. Kopru ne kadar
+    kalinsa o kadar blok kirilir, sonra delikten asagi dusersin; koprunun altinda havada
+    gorunmez bloklar artik olusmaz. Deligin kenarlarindaki ince cizgi / aralik kapatildi.
+    Bina icindeki bloklar artik her acidan normal bloklar gibi gorunur (seffaf blok yok).
+  - ZEMIN CUKURLARI da GTA modelinden gercekten kesilir: kaldirim kenari, egimli yerler ve
+    cukurun icindeki GTA parcalari artik kalmaz.
+  - TNT ve patlamalar GTA binalarini yandan da patlatir (binada krater acilir).
+  - SUDA: hizli yuzme artik Ctrl ile (Space sadece yukari cikarir). Yaratici modda suda iki kez
+    Space'e basinca yine ucmaya baslarsin.
+  - ARABADAN FIRLATMA: firlattigin / attigin sey arabanin hizini alir, araba giderken ileri
+    gider. Arabada dururken de biraz daha yukari ve uzaga gider.
+  - Arabadaki ve motordaki insanlara vurunca ya da ok / mizrak atinca artik isabet eder.
+  - Tum Minecraft dunyalari sifirlandi (eski dosyalar MinecraftSA\eski_dunyalar klasorunde).
+    Envanter de sifirdan baslar. Artik sadece GTA'da kaydedince kalir.
+
+0.9 SURUMUNDE GELENLER
+  - BINA KIRMA DUZGUN: kirdigin yerde GTA dokusu artik HIC kalmaz. Kirilan hucredeki GTA
+    modeli gercekten kesilip cikarilir; deligin icinde Minecraft bloklari, kenarlarinda yarim
+    bloklar gorunur. Bir binayi boydan boya delersen tunelin ucundan diger tarafi (sokak, gok,
+    arkadaki binalar) gorursun. Duvarin hemen arkasindaki bloklar daha dogru doldurulur.
+  - KAYIT ARTIK SADECE GTA KAYDIYLA: koydugun / kirdigin bloklar, envanter ve tecrube SADECE
+    oyunu kayit evinde kaydedersen kalir. Kaydetmeden cikarsan ya da kaydi yeniden yuklersen,
+    dunya o kaydin yapildigi andaki haline doner (GTA'nin kendisi gibi). Otomatik kayit yok.
+  - ANA MENU: butonlar ve dunya listesi yine Minecraft tarzi, ama arka plan GTA SA'nin kendi
+    menu arka plani (siyah + kosede GTA resmi) ve ustte MINECRAFT yerine "GTA SA" yaziyor.
+  - RADAR: sol alttaki GTA haritasi (radar) yine gorunur. F9 ile ac / kapat (secimin hatirlanir).
+    Gorunmuyorsa GTA Ayarlar > Ekran > Radar ayarinin "Kapali" olmadigina bak.
+
+0.8 SURUMUNDE GELENLER
+  - BINALAR ARTIK GTA GIBI KALIR: bina bloklara donusmez. Bir duvara / catiya / kayaya kazmayla
+    vurup kirinca SADECE O NOKTADA delik acilir, arkasi Minecraft bloklari olur (duvar ne ise o:
+    tugla, tahta, beton...). Kira kira icine girebilir, tunel acabilirsin. Disaridan bina yine
+    normal GTA binasi olarak gorunur. Zemin de ayni: sadece kazdigin yer acilir, alti blok olur.
+    (0.7'de bloga donusen binalar ve yollar, yanina gidince kendiliginden eski haline doner.)
+  - Zemin turu artik dogru okunuyor (eski surumlerde her sey "tas" saniliyordu): cimen -> cimen
+    blogu + toprak, kum -> kum, yol -> kara tas... Cimene fidan dikme ve kemik tozu da duzeldi.
+  - OLUNCE Minecraft'in "Oldun!" ekrani cikar (neden oldugun ve puanin ile).
+  - ANA MENU Minecraft gibi: "Tek Oyunculu / Ayarlar / Oyundan Cik". "Tek Oyunculu" -> DUNYA SEC ekrani: GTA kayitlarin dunyalar olarak listelenir.
+    "Secilen dunyada oyna" = o kaydi yukle, "Yeni Dunya Olustur" = yeni oyun, "Sil" = kaydi sil.
+    Oyun icinde ESC -> Minecraft tarzi "Oyun menusu" (Oyuna Don, Istatistikler, Harita, Ayarlar).
+    Ayarlar ve harita GTA'nin kendi ekranlaridir. Menude sorun olursa F10 = GTA'nin eski menusu
+    (kalici kapatmak icin ayarlarda MinecraftMenu=0).
+  - HER KAYIT AYRI BIR DUNYA: bloklarin, envanterin ve tecruben artik GTA kaydina baglidir
+    (world_slot1.dat ... world_slot8.dat). Kayit evinde oyunu kaydedince dunyan da o kayda
+    yazilir. "Yeni Dunya" bos baslar.
+
+0.7 SURUMUNDE GELENLER
+  - Malzeme dokuya gore: kirdigin yerin GTA dokusunun adina ve rengine bakilir (tahta ev ->
+    o renkte tahta, tugla zemin -> tugla, siva -> beton / terakota, metal -> demir...).
+  - Arabalar kirilinca patlamaz: icindekiler iner, araba kaybolur, renginde beton duser.
+  - Altin elma: Yenilenme + Emilim (sari kalpler). Etkiler sag ustte gorunur. Sut hepsini siler.
+  - Su altinda 10 hava baloncugu; bitince bogulursun.
+  - Elytra / ucus artik hicbir seyin icinden gecmez. Arabadakiler biraz daha buyuk.
+
+0.6 SURUMUNDE GELENLER
+  - Kazma duzeldi: cimen, toprak, kum, asfalt, kaldirim, beton ve kaya zemin artik cukur olur.
+    (Bir yer yine kazilmazsa MinecraftSA.log dosyasinda "Dig:" satirlari nedenini yazar.)
+  - Su ve lav Minecraft'taki gibi: tum animasyon kareleri, akan suyun yuzeyi egimli ve doku
+    akis yonune doner, su mavi ve yari saydam, lav parlak. Akinti seni, hayvanlari ve yerdeki
+    esyalari surukler. Suyun icindeyken ekran mavi, lavin icindeyken turuncu olur.
+  - ATES blogu: Cakmak ile bloga / yere sag tik -> ates yakar (Minecraft atesi, animasyonlu).
+    Ates tahta, kutuk, yaprak, yun, saman, kitaplik, halilari yakar ve yayilir; TNT'yi atesler.
+    Yagmur atesi sondurur. Atese sol tik ya da su dokmek sondurur.
+  - LAV GERCEKTEN YAKAR: lavin yanindaki yanici bloklar, GTA calilari ve kuru otlar tutusur.
+    Lava ya da atese giren yaya, polis, hayvan yanar; araba lavda alev alip patlar.
+    Yanarken olen hayvan pismis et dusurur. Lav fokurdar, kivilcim atar, etrafini turuncu aydinlatir.
+  - Mizrak (trident) elde ve firlatilirken Minecraft'taki 3D modeliyle gorunur.
+  - Sol elde kullanilan esyalarda (mizrak, yay, arbalet, yemek, durbun) artik SOL kol hareket eder.
+  - Cok blok koyunca bloklarin carpismasi (arabalar / yayalar icin) artik kapanmaz.
+
+0.5 SURUMUNDE GELENLER
+  - KAZMA: GTA zeminini (cimen, toprak, kum, asfalt, kaldirim...) kirinca orada CUKUR acilir.
+    Altinda Minecraft yeri cikar: toprak, tas, komur / demir / altin / elmas / kizil tas /
+    lapis / zumrut damarlari, granit, diyorit, andezit, derin kayrak (derinde) ve en altta
+    katman kayasi (64 blok asagida). Istedigin kadar asagi kazabilir, maden acabilirsin.
+    TNT ve patlamalar da zeminde krater acar.
+  - SU ve LAV: Su kovasi / lav kovasi ile sag tik -> koyarsin, Minecraft'taki gibi akar
+    (su 7 blok, lav 3 blok yayilir; asagi dusen su selale olur). Su + lav -> tas / kirik tas /
+    obsidyen. Bos kova ile su veya lav kaynagina sag tik -> geri alirsin. Suda yuzersin,
+    lavda yanarsin. Hayvanlar da suda yuzer, lavda yanar. Esyalar suda yuzer, lavda yanar.
+  - SOL EL: F tusu sag eldeki esya ile sol eldekini degistirir (yakinda araba varsa F yine
+    arabaya bindirir). Sol eldeki esya 1. sahista ve 3. sahista (Steve ve CJ) gorunur.
+    Sag elinde sag tikla kullanilan bir sey yoksa (bos el, kilic, kazma...) sag tik SOL ELI
+    kullanir: sol elde mesale / blok -> koyar, yemek -> yer, yay -> atar, kova -> doldurur.
+  - AGAC YETISTIRME: Fidani cimene / topraga (GTA cimeni de olur) koy, zamanla agac olur.
+    Fidan: GTA calilarini / agac yapraklarini kirinca dusebilir. Kemik tozu ile sag tik ->
+    hemen buyur (cimene kemik tozu -> ot ve cicek). Cicekler, mantarlar, ot da konabilir.
+  - MINECRAFT FIZIGI: yurume / kosma / egilme hizi, ziplama (1,25 blok), dusme, havadaki
+    kayma, yarim bloga cikma, egilirken kenardan dusmeme, dusme hasari Minecraft'taki gibi.
+    (Kapatmak icin ayarlarda MinecraftPhysics=0.)
+  - Kum, cakil ve beton tozu havada durmaz, asagi duser.
+  - TECRUBE (XP): Maden kirmak, hayvan / yaya / yagmaci oldurmek, hayvan yavrulatmak ve
+    balik tutmak yesil tecrube kureleri verir. Alt cubuk dolar, seviye yazisi gorunur.
+    Tecrube sisesi: sag tik -> firlat, kirilinca tecrube cikar.
+
+0.4 SURUMUNDE GELENLER
+  - Koyluler / yagmacilar arabada kuculup oturur, kafalari tavandan cikmaz.
+  - Araba / motor surerken: yemek ye, yay / arbalet / mizrak kullan, kartopu-yumurta at,
+    1-9 ve fare tekerlegi ile esya sec, E ile envanteri ac. Havai fisek = arabaya roket!
+  - Yayalara elle, kilicla ve okla yeniden vurulabiliyor (0.3'teki hata duzeldi).
+  - Yuzme: suda Minecraft tuslari (asagida). Steve suda yuzme hareketi yapar.
+  - Steve animasyonlari: yuzme, yeme/icme, durbun, arbalet, mizrak, olum, hasar (kirmizi),
+    egilme, binme, suzulme.
+  - Ctrl'ye bir kez bas: durana kadar kosarsin (Minecraft gibi).
+  - Zipla: tam 1,25 blok. Zipladiginda altina blok koyabilirsin. Blok koymak artik takilmiyor.
+  - Olta her seyi ceker: insan, araba, esya, hayvan, yerdeki esyalar.
+  - Kirdigin yere gore malzeme (asagidaki liste). Arabalari bile kirip demir alabilirsin!
+  - Giydigin zirhlar Steve'in uzerinde gorunur ve hasari azaltir.
+  - Polisler (yagmacilar) ve ceteler silah yerine ok atar, polis helikopteri de.
+  - Yeni esyalar: arbalet, mizrak (yildirim!), ates topu, ruzgar topu, durbun, totem, su/lav
+    kovasi, sut, altin elma, tekne, vagon, eyer (domuza bin!). Koylulerle zumrut ticareti.
+
+TUSLAR (yaya iken)
+  W A S D              : yuru
+  BOSLUK               : zipla (basili tutarsan surekli ziplar)
+  Sol CTRL             : bir kez bas -> kos (durunca biter)
+  Sol SHIFT (basili)   : egil / sinsi yuru
+  Sol tik (basili tut) : blok kir / GTA haritasindan malzeme topla / araba kir
+  Sol tik              : vur (kilic, balta veya yumruk - bekleme suresi dolunca tam hasar)
+  Sag tik              : blok koy / masa, firin, sandik ac / esyayi kullan / koyluyle ticaret
+  Sag tik (basili tut) : yay ger, arbalet doldur, mizrak firlat, ye / ic, durbunle bak
+  Orta tik             : (Yaratici) baktigin blogu eline al
+  1-9 / fare tekerlegi : alt slot sec
+  E                    : envanter (Yaratici modda: sekmeli tum esyalar)
+  Q                    : elindeki esyadan 1 tane at   (Ctrl+Q: hepsini at)
+  F                    : sag el <-> sol el esyasini degistir (yakinda araba yoksa)
+  F5                   : kamera: 1. sahis -> 3. sahis (arka) -> 3. sahis (on). Arabada da calisir.
+  F6                   : Minecraft modunu ac / kapat (normal GTA'ya don)
+  F7                   : Hayatta kalma <-> Yaratici mod
+  F8                   : CJ <-> Steve
+  F9                   : sol alttaki GTA haritasi (radar) ac / kapat
+  Esc / E              : acik pencereyi kapat
+
+SUDA
+  W A S D = yuz, Ctrl = hizli yuz, Shift = dal, Bosluk (su altinda) = yuzeye cik.
+  Yaratici modda Bosluk'a iki kez bas = uc (sudan cikip ucarsin).
+
+ARABADA / MOTORDA
+  Surus GTA'daki gibi. Ek olarak: 1-9 ve tekerlek esya secer, E envanter,
+  Sag tik: ye / ic / yay / arbalet / mizrak / kartopu / ates topu / ruzgar topu.
+  Elinde havai fisek varken sag tik: araba roket gibi ileri firlar.
+  Yerdeki esyalari arabayla uzerinden gecerek toplayabilirsin.
+
+UCMAK
+  Yaratici mod : BOSLUK tusuna hizlica 2 kez bas -> ucus. Bosluk = yuksel, Sol Shift = alcal,
+                 Ctrl = hizli uc. Tekrar 2 kez bosluk ya da yere inmek ucusu bitirir.
+  Elytra       : Envanterde (E) gogus zirhi slotuna Elitra koy. Zipla ya da yuksekten atla,
+                 havadayken tekrar BOSLUK'a bas -> suzulursun. Asagi bak = hizlan.
+  Havai fisek  : Suzulurken SAG TIK -> ileri firlatir.
+
+KIRDIGIN YERE GORE MALZEME (Hayatta kalma)
+  Asfalt yol -> Kara Tas        Kaldirim -> Tas Tugla        Beton -> Acik Gri Beton
+  Kaya, bina duvari -> Kirik Tas (+ bazen komur, demir, altin, elmas, zumrut...)
+  Cimen -> Toprak (+ tohum, havuc, patates)   Kum -> Kum   Col kumu -> Kizil Kum
+  Nehir yatagi -> Kil           Camur -> Camur               Cakil -> Cakil / cakmaktasi
+  Agac -> kutuk (palmiye: orman, cam: ladin...)  Cali -> elma / cubuk (makasla: yaprak)
+  Cam -> Cam   Metal, konteyner, cop kutusu -> demir parcasi / kulce   Direk lamba -> demir + parilti tozu
+  Market rafi, otomat -> yiyecek   Ofis masasi -> kagit, kitap   Restoran masasi -> yemek
+  Karton kutu -> kagit   Cop torbasi -> cop (kemik, curuk et...)   Lastik -> balcik topu
+  Trafik konisi -> Turuncu Beton   Misir tarlasi -> bugday   Saman balyasi -> Saman Balyasi
+  ARABA (kazma ile, birkac saniye) -> demir kulce, cam, kizil tas, deri, komur, aracin renginde beton.
+         Araba patlamaz: icindekiler iner, araba kaybolur.
+         Bisiklet, motor, tekne, helikopter de ayni sekilde kirilir.
+  Sokak esyalari (lamba, cop kutusu, bank...) kirilinca devrilir ve bir kez malzeme verir.
+
+KOYLULER (ticaret)
+  Koyluye SAG TIK: teklifini gosterir (her tikta bir sonraki).
+  Elinde ZUMRUT varken sag tik: gosterilen esyayi satin alirsin.
+  Koylunun istedigi esya elindeyken sag tik: satarsin, zumrut alirsin.
+  Ciftci: ekmek, elma / bugday, havuc alir.  Kasap: pismis et / ciy et alir.
+  Kutuphaneci: kitap, cam / kagit alir.  Rahip: kizil tas, ender incisi / curuk et alir.
+  Zirhci: demir zirhlar / komur, demir alir.  Zumrut: yagmacilar, madencilik, ticaret.
+
+ESYALAR
+  Kilic/balta  : Havada duserken vurursan kritik vurus. Kosarken vurursan daha uzaga iter.
+  Yay          : Ok gerekir (Yaratici modda gerekmez). Sag tik basili tut, birak.
+  Arbalet      : Sag tik basili tut -> dolar (1,25 sn). Sonra sag tik -> atar.
+                 Sol eldeki (ikinci el) havai fisek varsa patlayan roket atar!
+  Mizrak       : Sag tik basili tut, birak -> firlar ve sana geri doner.
+                 Yagmur yagiyorsa (ya da Yaratici modda) vurdugu yere YILDIRIM duser.
+  Ates topu    : Sag tik -> ates topu firlatir (patlar, yangin cikarir). TNT'ye: atesler.
+  Ruzgar topu  : Sag tik -> firlat. Carptigi yerde her seyi havaya ucurur.
+                 Ayaginin dibine at -> sen de yukari ucarsin (dusme hasari yok).
+  Durbun       : Sag tik basili -> yakinlastirir.
+  Totem        : Elinde (ya da ikinci elde) varken can azalinca seni kurtarir
+                 (Yenilenme II 45 sn, Emilim II, Ates Direnci 40 sn).
+  Sut kovasi   : Ic -> butun etkiler ve polis aranma seviyen sifirlanir!
+  Altin elma   : Yenilenme II (5 sn) + Emilim (2 dk, 2 sari kalp).
+                 Buyulu: Yenilenme II (20 sn), Emilim IV (8 sari kalp), Direnc ve Ates Direnci (5 dk).
+  Su kovasi    : sag tik -> su koyar (akar), yanginlari sondurur.  Lav kovasi: lav koyar.
+                 Bos kova: su / lav kaynagina sag tik -> doldurur. GTA denizine sag tik -> su.
+  Kemik tozu   : fidana -> agac, cimene -> ot ve cicek.  (Kemik: iskelet yoktur, yayalardan duser.)
+  Tecrube sisesi: sag tik -> firlat, tecrube kureleri cikar.
+  Tekne        : suya sag tik -> GTA botu cikar.   Vagon: yere sag tik -> go-kart cikar.
+  Eyer         : domuza sag tik -> eyer takilir. Eyerli domuza sag tik -> binersin.
+                 W A S D ile surersin, Ctrl hizlandirir, Shift ile inersin.
+  Cakmak       : TNT'ye sag tik -> ateslenir. Bloga / yere sag tik -> Minecraft atesi yakar.
+  TNT          : patlayinca yakindaki TNT'leri atesler ve firlatir (zincirleme).
+  Olta         : suya at, balik gelince sag tik. Insana / arabaya / hayvana / esyaya
+                 takip sag tik -> sana dogru ceker.
+  Buyulu Sopa  : (Yaratici) Sol tik: nisan aldigini firlat. Sag tik: sok dalgasi.
+
+HAYVANLAR
+  Cimenlik, toprak ve kumluk yerlerde dogarlar. Yaratici modda Cagirma Yumurtalari.
+  Koyun + Makas: yun.  Inek + Kova: sut.  Besle -> kalp -> yavru.  Tavuk yumurtlar.
+
+AYARLAR (MinecraftSA\MinecraftSA.ini)
+  FOV=70               gorus acisi (30-110). 0 yazarsan GTA'nin kendi gorus acisi kullanilir.
+  MinecraftControls=1  0 yaparsan ziplama / kosma / egilme GTA tuslarina doner.
+  ViewBobbing=1        yururken ekran sallanmasi.
+  PedSkins=1           0 yaparsan yayalar normal GTA gorunumunde kalir.
+  NpcArrows=1          0 yaparsan polisler yine silah kullanir.
+  Animals=1            hayvanlar dogsun mu.   MaxAnimals=14  en fazla hayvan sayisi.
+  MinecraftPhysics=1   0 yaparsan yurume / ziplama / dusme yine GTA fizigiyle olur
+                       (cukur kenarlari ve yer altinda Minecraft fizigi yine calisir).
+  GroundHoles=1        kazilan cukurlarin GTA zemininde gorunmesi. Goruntu bozulursa 0 yap.
+  BreakBuildings=1     binalarin / kayalarin kirilip icine girilebilmesi. 0 = sadece esya duser.
+  MinecraftMenu=1      ana menu, dunya listesi ve duraklatma menusu Minecraft gibi. 0 = GTA menusu.
+  ShowRadar=1          sol alttaki GTA haritasi (radar). Oyunda F9 ile de degisir.
+  [Keys] SwapHands=0x46  sol el degistirme tusu (F).
+  [Keys] Radar=0x78      radar ac / kapat tusu (F9).
+
+NOTLAR
+  - Dunya SADECE GTA oyunu kaydedilince MinecraftSA\world_slotN.dat dosyasina yazilir
+    (N = GTA kayit numarasi). Kaydedilmemis degisiklikler cikista ya da kayit yuklenince silinir.
+    Hayvanlar kaydedilmez; oyunu yeniden actiginda yenileri dogar.
+  - Sorun olursa MinecraftSA\MinecraftSA.log dosyasini gonder (oyunu yeniden acmadan once).
+  - Kazdigin cukurlar da kaydedilir. Eski (0.4) kayit otomatik yeni surume cevrilir.
