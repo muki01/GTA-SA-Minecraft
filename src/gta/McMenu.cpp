@@ -169,7 +169,7 @@ void TitlePage() {
     y += 24.0f * s;
     if (Button(kStr[STR_QUIT], x, y, bw))
         Switch(SCR_QUIT_ASK);
-    ui::Label("GTA SA Minecraft 0.32", 2.0f * s, gF.H - 10.0f * s, s);
+    ui::Label("GTA SA Minecraft 0.33", 2.0f * s, gF.H - 10.0f * s, s);
     const char* right = "F10: GTA menüsü";
     ui::Label(right, gF.W - ui::TextW(right, s) - 2.0f * s, gF.H - 10.0f * s, s, ui::Color(200, 200, 200));
 }

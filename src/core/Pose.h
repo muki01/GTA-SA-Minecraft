@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-#include "ModCommon.h"
+#include "Core.h"
 
 namespace mc {
 
@@ -12,10 +12,10 @@ inline float Rad(float deg) { return deg * (kPi / 180.0f); }
 
 struct Pose {
     // world = o + X*x + Y*y + Z*z
-    CVector X{ 1, 0, 0 }, Y{ 0, 1, 0 }, Z{ 0, 0, 1 }, o{ 0, 0, 0 };
+    Vec3 X{ 1, 0, 0 }, Y{ 0, 1, 0 }, Z{ 0, 0, 1 }, o{ 0, 0, 0 };
 
-    CVector P(float x, float y, float z) const { return o + X * x + Y * y + Z * z; }
-    CVector D(float x, float y, float z) const { return X * x + Y * y + Z * z; }
+    Vec3 P(float x, float y, float z) const { return o + X * x + Y * y + Z * z; }
+    Vec3 D(float x, float y, float z) const { return X * x + Y * y + Z * z; }
 
     void Translate(float x, float y, float z) { o = P(x, y, z); }
     void Scale(float x, float y, float z) {
@@ -26,19 +26,19 @@ struct Pose {
     void Scale(float s) { Scale(s, s, s); }
     void RotX(float a) {
         float c = std::cos(a), s = std::sin(a);
-        CVector y = Y * c + Z * s, z = Z * c - Y * s;
+        Vec3 y = Y * c + Z * s, z = Z * c - Y * s;
         Y = y;
         Z = z;
     }
     void RotY(float a) {
         float c = std::cos(a), s = std::sin(a);
-        CVector x = X * c - Z * s, z = X * s + Z * c;
+        Vec3 x = X * c - Z * s, z = X * s + Z * c;
         X = x;
         Z = z;
     }
     void RotZ(float a) {
         float c = std::cos(a), s = std::sin(a);
-        CVector x = X * c + Y * s, y = Y * c - X * s;
+        Vec3 x = X * c + Y * s, y = Y * c - X * s;
         X = x;
         Y = y;
     }
@@ -57,7 +57,7 @@ struct Pose {
 
 // Minecraft model space (x = model's left, y = down, z = back; units: blocks) for a character
 // standing at `feet` with unit axes right / up / forward. `scale` = metres per block.
-inline Pose EntityPose(const CVector& feet, const CVector& right, const CVector& up, const CVector& forward, float scale) {
+inline Pose EntityPose(const Vec3& feet, const Vec3& right, const Vec3& up, const Vec3& forward, float scale) {
     Pose p;
     p.X = right * -scale;
     p.Y = up * -scale;
@@ -67,17 +67,17 @@ inline Pose EntityPose(const CVector& feet, const CVector& right, const CVector&
 }
 
 // Minecraft world axes (x east, y up, z south) placed at a GTA position.
-inline Pose WorldPose(const CVector& at) {
+inline Pose WorldPose(const Vec3& at) {
     Pose p;
-    p.X = CVector(1, 0, 0);
-    p.Y = CVector(0, 0, 1);
-    p.Z = CVector(0, -1, 0);
+    p.X = Vec3(1, 0, 0);
+    p.Y = Vec3(0, 0, 1);
+    p.Z = Vec3(0, -1, 0);
     p.o = at;
     return p;
 }
 
 // Minecraft view space (x right, y up, z towards the viewer).
-inline Pose ViewPose(const CVector& eye, const CVector& right, const CVector& up, const CVector& forward) {
+inline Pose ViewPose(const Vec3& eye, const Vec3& right, const Vec3& up, const Vec3& forward) {
     Pose p;
     p.X = right;
     p.Y = up;

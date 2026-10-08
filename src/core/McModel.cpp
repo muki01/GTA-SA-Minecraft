@@ -1,12 +1,38 @@
 #include <cstring>
 #include "McModel.h"
 
-#include "Draw3D.h"
+#include "BlockMesh.h"
 #include "GameState.h"
 #include "Items.h"
-#include "Textures.h"
 
 namespace mc {
+
+namespace {
+struct NoSink : ModelSink {
+    void Texture(int) override {}
+    void Quad(const Vec3*, const float*, const float*, uint32_t) override {}
+    bool Opaque(int, int, int) override { return false; }
+} gNoSink;
+ModelSink* gSink = &gNoSink;
+
+ModelSink& Sink() { return *gSink; }
+
+uint32_t Argb(int r, int g, int b, int a = 255) {
+    return ((uint32_t)(a & 255) << 24) | ((uint32_t)(r & 255) << 16) | ((uint32_t)(g & 255) << 8) | (uint32_t)(b & 255);
+}
+uint32_t Gray(float v, int a = 255) {
+    int c = (int)Clamp(v * 255.0f, 0.0f, 255.0f);
+    return Argb(c, c, c, a);
+}
+// a quad whose corners take the texture's corners in order: (u0, v0), (u1, v0), (u1, v1), (u0, v1)
+void Quad4(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, float u0, float v0, float u1, float v1, uint32_t col) {
+    const Vec3 p[4] = { p0, p1, p2, p3 };
+    const float u[4] = { u0, u1, u1, u0 }, v[4] = { v0, v0, v1, v1 };
+    Sink().Quad(p, u, v, col);
+}
+} // namespace
+
+void SetModelSink(ModelSink* sink) { gSink = sink ? sink : &gNoSink; }
 
 // ================================================================ cubes
 void McCube(const Pose& pose, float x, float y, float z, float w, float h, float d, float U, float V,
@@ -15,11 +41,11 @@ void McCube(const Pose& pose, float x, float y, float z, float w, float h, float
     if (mirror)
         std::swap(x0, x1);
     const float k = 1.0f / 16.0f;
-    const CVector v[8] = {
+    const Vec3 v[8] = {
         pose.P(x0 * k, y0 * k, z0 * k), pose.P(x1 * k, y0 * k, z0 * k), pose.P(x1 * k, y1 * k, z0 * k), pose.P(x0 * k, y1 * k, z0 * k),
         pose.P(x0 * k, y0 * k, z1 * k), pose.P(x1 * k, y0 * k, z1 * k), pose.P(x1 * k, y1 * k, z1 * k), pose.P(x0 * k, y1 * k, z1 * k),
     };
-    CVector centre(0, 0, 0);
+    Vec3 centre(0, 0, 0);
     for (auto& p : v)
         centre += p;
     centre = centre * 0.125f;
@@ -37,9 +63,9 @@ void McCube(const Pose& pose, float x, float y, float z, float w, float h, float
     };
     const float tw = (float)ENT_TEX_W, th = (float)ENT_TEX_H;
     for (const Poly& pl : polys) {
-        CVector c[4] = { v[pl.a], v[pl.b], v[pl.c], v[pl.e] };
-        CVector fc = (c[0] + c[1] + c[2] + c[3]) * 0.25f - centre;
-        float m = fc.Magnitude();
+        Vec3 c[4] = { v[pl.a], v[pl.b], v[pl.c], v[pl.e] };
+        Vec3 fc = (c[0] + c[1] + c[2] + c[3]) * 0.25f - centre;
+        float m = fc.Length();
         float nz = m > 1e-6f ? fc.z / m : 0.0f;
         float nx = m > 1e-6f ? fc.x / m : 0.0f;
         float shade = st.light * Clamp(0.74f + 0.26f * nz + 0.06f * nx, 0.0f, 1.0f);
@@ -51,9 +77,9 @@ void McCube(const Pose& pose, float x, float y, float z, float w, float h, float
         }
         const float us[4] = { u1, u0, u0, u1 };
         const float vs[4] = { v0, v0, v1, v1 };
-        RwUInt32 col = d3::Argb((int)Clamp(shade * st.r * 255.0f, 0.0f, 255.0f), (int)Clamp(shade * st.g * 255.0f, 0.0f, 255.0f),
+        uint32_t col = Argb((int)Clamp(shade * st.r * 255.0f, 0.0f, 255.0f), (int)Clamp(shade * st.g * 255.0f, 0.0f, 255.0f),
                                 (int)Clamp(shade * st.b * 255.0f, 0.0f, 255.0f), 255);
-        d3::QuadUV(c, us, vs, col);
+        Sink().Quad(c, us, vs, col);
     }
 }
 
@@ -215,7 +241,7 @@ void DrawRightArm(const Pose& pose, const ModelStyle& st, bool sleeve) {
 }
 
 void DrawPlayerModel(const Pose& base, const HumanoidAnim& a, const ModelStyle& st) {
-    d3::SetRaster(gEntityTex.Raster());
+    Sink().Texture(MT_ENTITY);
     Pose head = PartPose(base, a.head);
     McCube(head, -4, -8, -4, 8, 8, 8, 0, 0, st);
     McCube(head, -4, -8, -4, 8, 8, 8, 32, 0, st, 0.5f);
@@ -235,7 +261,7 @@ void DrawPlayerModel(const Pose& base, const HumanoidAnim& a, const ModelStyle& 
 }
 
 void DrawElytra(const Pose& base, bool crouch, bool gliding, float dive, const ModelStyle& st) {
-    d3::SetRaster(gEntityTex.Raster());
+    Sink().Texture(MT_ENTITY);
     float x = 0.2617994f, z = -0.2617994f, y = 0.0f, yOff = 0.0f;
     if (gliding) {
         x = dive * 0.34906584f + (1.0f - dive) * x;
@@ -275,7 +301,7 @@ int ArmorMaterial(uint16_t id) {
 } // namespace
 
 void DrawArmor(const Pose& base, const HumanoidAnim& a, const uint16_t armor[4], float light, float r, float g, float b) {
-    d3::SetRaster(gEntityTex.Raster());
+    Sink().Texture(MT_ENTITY);
     for (int slot = 0; slot < 4; ++slot) {
         const uint16_t id = armor[slot];
         const int mat = id ? ArmorMaterial(id) : -1;
@@ -336,17 +362,17 @@ const Edges& EdgesFor(int tile) {
     Edges& ed = gEdgeCache[tile];
     for (int y = 0; y < 16; ++y)
         for (int x = 0; x < 16; ++x) {
-            if (!AtlasPixelOpaque(tile, x, y))
+            if (!Sink().Opaque(tile, x, y))
                 continue;
-            if (!AtlasPixelOpaque(tile, x - 1, y)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(0); }
-            if (!AtlasPixelOpaque(tile, x + 1, y)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(1); }
-            if (!AtlasPixelOpaque(tile, x, y - 1)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(2); }
-            if (!AtlasPixelOpaque(tile, x, y + 1)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(3); }
+            if (!Sink().Opaque(tile, x - 1, y)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(0); }
+            if (!Sink().Opaque(tile, x + 1, y)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(1); }
+            if (!Sink().Opaque(tile, x, y - 1)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(2); }
+            if (!Sink().Opaque(tile, x, y + 1)) { ed.e.push_back((uint8_t)x); ed.e.push_back((uint8_t)y); ed.e.push_back(3); }
         }
     return ed;
 }
 
-RwUInt32 ItemColor(float shade, bool glint) {
+uint32_t ItemColor(float shade, bool glint) {
     float r = shade, g = shade, b = shade;
     if (glint) {
         float t = 0.5f + 0.5f * std::sin(gGame.age * 5.0f);
@@ -354,7 +380,7 @@ RwUInt32 ItemColor(float shade, bool glint) {
         g *= 0.55f + 0.25f * t;
         b *= 1.0f;
     }
-    return d3::Argb((int)Clamp(r * 255.0f, 0.0f, 255.0f), (int)Clamp(g * 255.0f, 0.0f, 255.0f), (int)Clamp(b * 255.0f, 0.0f, 255.0f), 255);
+    return Argb((int)Clamp(r * 255.0f, 0.0f, 255.0f), (int)Clamp(g * 255.0f, 0.0f, 255.0f), (int)Clamp(b * 255.0f, 0.0f, 255.0f), 255);
 }
 
 void DrawBlockCube(const Pose& p, int block, float light) {
@@ -371,32 +397,32 @@ void DrawBlockCube(const Pose& p, int block, float light) {
     const bool emissive = Block(block).emissive;
     for (const F& f : faces) {
         TileUV uv = AtlasTileUV(BlockFaceTile(block, f.face, 0));
-        CVector c[4];
+        Vec3 c[4];
         for (int i = 0; i < 4; ++i)
             c[i] = p.P(f.c[i][0], f.c[i][1], f.c[i][2]);
-        d3::Quad(c[0], c[1], c[2], c[3], uv.u0, uv.v0, uv.u1, uv.v1, d3::Gray(emissive ? 1.0f : light * f.shade));
+        Quad4(c[0], c[1], c[2], c[3], uv.u0, uv.v0, uv.u1, uv.v1, Gray(emissive ? 1.0f : light * f.shade));
     }
 }
 
 void DrawSprite(const Pose& p, int tile, float light, bool glint) {
     TileUV uv = AtlasTileUV(tile);
     const float zf = 8.5f / 16.0f, zb = 7.5f / 16.0f;
-    RwUInt32 col = ItemColor(light, glint);
-    d3::Quad(p.P(0, 1, zf), p.P(1, 1, zf), p.P(1, 0, zf), p.P(0, 0, zf), uv.u0, uv.v0, uv.u1, uv.v1, col);
-    d3::Quad(p.P(0, 1, zb), p.P(1, 1, zb), p.P(1, 0, zb), p.P(0, 0, zb), uv.u0, uv.v0, uv.u1, uv.v1, col);
+    uint32_t col = ItemColor(light, glint);
+    Quad4(p.P(0, 1, zf), p.P(1, 1, zf), p.P(1, 0, zf), p.P(0, 0, zf), uv.u0, uv.v0, uv.u1, uv.v1, col);
+    Quad4(p.P(0, 1, zb), p.P(1, 1, zb), p.P(1, 0, zb), p.P(0, 0, zb), uv.u0, uv.v0, uv.u1, uv.v1, col);
     const Edges& ed = EdgesFor(tile);
     const float tu = (uv.u1 - uv.u0) / 16.0f, tv = (uv.v1 - uv.v0) / 16.0f;
     const float k = 1.0f / 16.0f;
-    RwUInt32 side = ItemColor(light * 0.75f, glint), top = ItemColor(light * 0.95f, glint), bottom = ItemColor(light * 0.55f, glint);
+    uint32_t side = ItemColor(light * 0.75f, glint), top = ItemColor(light * 0.95f, glint), bottom = ItemColor(light * 0.55f, glint);
     for (size_t i = 0; i + 2 < ed.e.size(); i += 3) {
         int px = ed.e[i], py = ed.e[i + 1], dir = ed.e[i + 2];
         float u = uv.u0 + (px + 0.5f) * tu, v = uv.v0 + (py + 0.5f) * tv;
         float xl = px * k, xr = (px + 1) * k, yt = 1.0f - py * k, yb = 1.0f - (py + 1) * k;
         switch (dir) {
-        case 0: d3::Quad(p.P(xl, yt, zb), p.P(xl, yt, zf), p.P(xl, yb, zf), p.P(xl, yb, zb), u, v, u, v, side); break;
-        case 1: d3::Quad(p.P(xr, yt, zf), p.P(xr, yt, zb), p.P(xr, yb, zb), p.P(xr, yb, zf), u, v, u, v, side); break;
-        case 2: d3::Quad(p.P(xl, yt, zb), p.P(xr, yt, zb), p.P(xr, yt, zf), p.P(xl, yt, zf), u, v, u, v, top); break;
-        default: d3::Quad(p.P(xl, yb, zf), p.P(xr, yb, zf), p.P(xr, yb, zb), p.P(xl, yb, zb), u, v, u, v, bottom); break;
+        case 0: Quad4(p.P(xl, yt, zb), p.P(xl, yt, zf), p.P(xl, yb, zf), p.P(xl, yb, zb), u, v, u, v, side); break;
+        case 1: Quad4(p.P(xr, yt, zf), p.P(xr, yt, zb), p.P(xr, yb, zb), p.P(xr, yb, zf), u, v, u, v, side); break;
+        case 2: Quad4(p.P(xl, yt, zb), p.P(xr, yt, zb), p.P(xr, yt, zf), p.P(xl, yt, zf), u, v, u, v, top); break;
+        default: Quad4(p.P(xl, yb, zf), p.P(xr, yb, zf), p.P(xr, yb, zb), p.P(xl, yb, zb), u, v, u, v, bottom); break;
         }
     }
 }
@@ -404,7 +430,7 @@ void DrawSprite(const Pose& p, int tile, float light, bool glint) {
 
 // TridentModel (entity/trident.png, 32x32): the pole with its three spikes; the spikes point to -y
 void DrawTridentModel(const Pose& p, float light) {
-    d3::SetRaster(gEntityTex.Raster());
+    Sink().Texture(MT_ENTITY);
     ModelStyle st;
     st.tex = ENT_TRIDENT;
     st.light = light;
@@ -413,7 +439,7 @@ void DrawTridentModel(const Pose& p, float light) {
     McCube(p, -2.5f, -3.0f, -0.5f, 1, 4, 1, 4, 3, st);
     McCube(p, -0.5f, -4.0f, -0.5f, 1, 4, 1, 0, 0, st);
     McCube(p, 1.5f, -3.0f, -0.5f, 1, 4, 1, 4, 3, st, 0.0f, true);
-    d3::SetRaster(gAtlasTex.Raster());
+    Sink().Texture(MT_ATLAS);
 }
 
 // trident_in_hand / trident_throwing: the trident's own hand transforms (not mirrored for the left hand)
@@ -445,7 +471,7 @@ void ApplyTridentDisplay(Pose& p, bool firstPerson, bool left, bool usingItem) {
 void DrawItemModel(Pose p, uint16_t id, float light, int tileOverride, bool inHand) {
     if (!IsValidItem(id))
         return;
-    d3::SetRaster(gAtlasTex.Raster());
+    Sink().Texture(MT_ATLAS);
     p.Translate(-0.5f, -0.5f, -0.5f);
     if (inHand && id == ID_TRIDENT) {
         p.Scale(1.0f, -1.0f, -1.0f); // the "special" model's transformation
@@ -499,15 +525,15 @@ void DrawPlayerFull(const Pose& base, const PlayerDrawInput& in) {
         DrawHeldItem(LeftArmPose(base, a), in.offHeld, in.light, in.offTile, true, in.offUsing);
 }
 
-Pose ArmPoseFromBones(const CVector& elbow, const CVector& hand, const CVector& bodyRight, float scale, bool left) {
-    CVector d = hand - elbow;
-    float m = d.Magnitude();
-    d = m > 1e-4f ? d * (1.0f / m) : CVector(0, 0, -1);
-    CVector x0 = bodyRight * -1.0f;
-    CVector x = x0 - d * (x0.x * d.x + x0.y * d.y + x0.z * d.z);
-    float xm = x.Magnitude();
-    x = xm > 1e-4f ? x * (1.0f / xm) : CVector(1, 0, 0);
-    CVector z = CVector::Cross(x, d);
+Pose ArmPoseFromBones(const Vec3& elbow, const Vec3& hand, const Vec3& bodyRight, float scale, bool left) {
+    Vec3 d = hand - elbow;
+    float m = d.Length();
+    d = m > 1e-4f ? d * (1.0f / m) : Vec3(0, 0, -1);
+    Vec3 x0 = bodyRight * -1.0f;
+    Vec3 x = x0 - d * (x0.x * d.x + x0.y * d.y + x0.z * d.z);
+    float xm = x.Length();
+    x = xm > 1e-4f ? x * (1.0f / xm) : Vec3(1, 0, 0);
+    Vec3 z = Cross(x, d);
     Pose p;
     p.X = x * scale;
     p.Y = d * scale;
@@ -553,7 +579,7 @@ void DrawFirstPerson(const Pose& view, const FirstPersonInput& in) {
         p.RotX(Rad(200.0f));
         p.RotY(Rad(-135.0f));
         p.Translate(5.6f, 0.0f, 0.0f);
-        d3::SetRaster(gEntityTex.Raster());
+        Sink().Texture(MT_ENTITY);
         ModelStyle st;
         st.tex = ENT_STEVE;
         st.light = in.light;
@@ -658,7 +684,7 @@ void DrawFirstPerson(const Pose& view, const FirstPersonInput& in) {
 
 // ================================================================ mobs
 void DrawMob(int kind, const Pose& base, const MobAnim& a, float light, float r, float g, float b) {
-    d3::SetRaster(gEntityTex.Raster());
+    Sink().Texture(MT_ENTITY);
     ModelStyle st;
     st.light = light;
     st.r = r; st.g = g; st.b = b;
@@ -739,7 +765,7 @@ void DrawMob(int kind, const Pose& base, const MobAnim& a, float light, float r,
 }
 
 void DrawNpc(int kind, const Pose& base, const NpcAnim& a, float light, float r, float g, float b) {
-    d3::SetRaster(gEntityTex.Raster());
+    Sink().Texture(MT_ENTITY);
     ModelStyle st;
     st.light = light;
     st.r = r; st.g = g; st.b = b;
@@ -798,7 +824,7 @@ void DrawNpc(int kind, const Pose& base, const NpcAnim& a, float light, float r,
             McCube(Part(base, 5, 2, 0, lax, lay, 0), -1, -2, -2, 4, 12, 4, 40, 46, st, 0, true);
             if (!a.riding && (a.crossbow || a.armed)) {
                 DrawHeldItem(ra, a.crossbow ? ID_CROSSBOW : ID_IRON_AXE, light, a.crossbow ? TILE_CROSSBOW_ARROW : -1);
-                d3::SetRaster(gEntityTex.Raster());
+                Sink().Texture(MT_ENTITY);
             }
         }
     }

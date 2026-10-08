@@ -59,6 +59,8 @@ struct Vec3 {
     float Length() const { return std::sqrt(x * x + y * y + z * z); }
 };
 
+inline Vec3 Cross(const Vec3& a, const Vec3& b) { return Vec3(a.y * b.z - a.z * b.y, a.z * b.x - a.x * b.z, a.x * b.y - a.y * b.x); }
+
 constexpr float kPi = 3.14159265358979f;
 
 inline int FloorDiv(int a, int b) { return (a >= 0) ? a / b : -((-a + b - 1) / b); }

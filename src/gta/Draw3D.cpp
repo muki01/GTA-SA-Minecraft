@@ -1,5 +1,8 @@
 #include "Draw3D.h"
 
+#include "McModel.h"
+#include "Textures.h"
+
 namespace mc {
 namespace d3 {
 
@@ -137,6 +140,22 @@ StateGuard::~StateGuard() {
     RwRenderStateSet(rwRENDERSTATEALPHATESTFUNCTIONREF, atr);
     gRaster = nullptr;
 }
+
+
+namespace {
+// the core's models (McModel.h) are drawn through here
+struct Im3DSink : ModelSink {
+    void Texture(int tex) override { SetRaster(tex == MT_ATLAS ? gAtlasTex.Raster() : gEntityTex.Raster()); }
+    void Quad(const Vec3* p, const float* u, const float* v, uint32_t color) override {
+        const CVector q[4] = { ToGta(p[0]), ToGta(p[1]), ToGta(p[2]), ToGta(p[3]) };
+        QuadUV(q, u, v, color);
+    }
+    bool Opaque(int tile, int px, int py) override { return AtlasPixelOpaque(tile, px, py); }
+} gSink;
+struct SinkRegistration {
+    SinkRegistration() { SetModelSink(&gSink); }
+} gSinkRegistration;
+} // namespace
 
 } // namespace d3
 } // namespace mc

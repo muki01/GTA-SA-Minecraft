@@ -10,6 +10,16 @@
 
 namespace mc {
 
+// The host draws the models' quads, textured from entity.png (the ENT_* rectangles) or the block / item atlas.
+enum ModelTexture { MT_ENTITY = 0, MT_ATLAS };
+struct ModelSink {
+    virtual ~ModelSink() = default;
+    virtual void Texture(int tex) = 0; // the next quads use this ModelTexture
+    virtual void Quad(const Vec3* p, const float* u, const float* v, uint32_t color) = 0; // four corners, ARGB
+    virtual bool Opaque(int tile, int px, int py) = 0; // a pixel of an atlas tile (the edges of a flat item)
+};
+void SetModelSink(ModelSink* sink);
+
 struct ModelStyle {
     GuiRect tex{ 0, 0, 64, 64 }; // where the entity's texture sits inside entity.png
     float light = 1.0f;
@@ -88,7 +98,7 @@ struct PlayerDrawInput {
 void DrawPlayerFull(const Pose& base, const PlayerDrawInput& in);
 
 // Arm pose for a model that is not ours (CJ): built from the elbow and hand positions.
-Pose ArmPoseFromBones(const CVector& elbow, const CVector& hand, const CVector& bodyRight, float scale, bool left = false);
+Pose ArmPoseFromBones(const Vec3& elbow, const Vec3& hand, const Vec3& bodyRight, float scale, bool left = false);
 
 // First-person view model (ItemInHandRenderer). `view` = ViewPose(eye, right, up, forward).
 struct FirstPersonInput {
