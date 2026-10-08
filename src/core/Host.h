@@ -81,6 +81,8 @@ struct Host {
     virtual HostHit ShotTrace(const Vec3& from, const Vec3& dir, float len, const ShotOwner& by) { return HostHit(); }
     virtual void HurtBeing(int being, float halfHearts, int how, const ShotOwner* by) {} // HurtKind; by nullptr: the player
     virtual void PushBeing(int being, const Vec3& velocity) {}               // m/s added to somebody on foot
+    virtual HostHit BeingTrace(const Vec3& origin, const Vec3& dir, float reach) { return HostHit(); } // people only
+    virtual bool UseOnBeing(int being) { return false; }                     // the use button on him (a villager trades)
     virtual void HurtVehicle(int vehicle, float halfHearts) {}
     // ---- the fishing hook
     virtual HostHit HookTrace(const Vec3& from, const Vec3& dir, float len) { return HostHit(); } // in the way of the flying hook

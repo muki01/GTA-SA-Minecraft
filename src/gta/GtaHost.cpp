@@ -6,6 +6,7 @@
 #include "CFireManager.h"
 #include "CGame.h"
 #include "CPlayerPed.h"
+#include "CPools.h"
 #include "CWaterLevel.h"
 #include "CWeapon.h"
 #include "CWeather.h"
@@ -24,6 +25,7 @@
 #include "Host.h"
 #include "ModCommon.h"
 #include "Movement.h"
+#include "PedSkins.h"
 #include "Terrain.h"
 
 namespace mc {
@@ -129,6 +131,19 @@ struct GtaHost : Host {
     void HurtBeing(int being, float halfHearts, int how, const ShotOwner* by) override { GtaHurtBeing(being, halfHearts, how, by); }
     void PushBeing(int being, const Vec3& velocity) override { GtaPushBeing(being, velocity); }
     void HurtVehicle(int vehicle, float halfHearts) override { GtaHurtVehicle(vehicle, halfHearts); }
+    HostHit BeingTrace(const Vec3& origin, const Vec3& dir, float reach) override {
+        HostHit h;
+        const PedHit ph = RaycastPeds(origin, dir, reach, FindPlayerPed(), false);
+        if (ph.ped) {
+            h.being = CPools::GetPedRef(ph.ped);
+            h.beingDist = ph.dist;
+            h.beingPoint = ph.point;
+        }
+        return h;
+    }
+    bool UseOnBeing(int being) override {
+        return VillagerInteract(CPools::ms_pPedPool ? CPools::ms_pPedPool->GetAtRef(being) : nullptr);
+    }
     HostHit HookTrace(const Vec3& from, const Vec3& dir, float len) override { return GtaHookTrace(from, dir, len); }
     bool HookPoint(const HostHit& hooked, Vec3* at) override {
         CVector p;

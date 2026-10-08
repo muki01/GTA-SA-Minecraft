@@ -38,6 +38,7 @@
 #include "Inventory.h"
 #include "Items.h"
 #include "GtaMobs.h"
+#include "Hands.h"
 #include "Mobs.h"
 #include "Movement.h"
 #include "PedSkins.h"
@@ -56,7 +57,6 @@ GtaState gGta;
 namespace {
 bool gWasDead = false;
 bool gHudFlagsTouched = false;
-bool gMeleeHeld = false; // the attack button was used up by a hit: no mining until it is let go
 CVector gLastPlayerPos;
 bool gWasInAir = false;
 bool gInitDone = false;
@@ -209,15 +209,6 @@ void MilkDrunk(CPlayerPed* ped, bool hadFireResistance) {
     gFireManager.ExtinguishPoint(ped->GetPosition(), 2.5f);
     FireResistanceCleared(ped, hadFireResistance);
     ShowMessage("Süt içtin: etkiler ve aranma seviyen sıfırlandı");
-}
-
-// returns true while the player eats or drinks (the eating itself is the core's EatingTick)
-bool UpdateEating(float dt, CPlayerPed* ped, bool rmbDown) {
-    const bool fireResistance = HasEffect(EFFECT_FIRE_RESISTANCE);
-    const EatResult r = EatingTick(dt, rmbDown, gGame.gameMode == MODE_SURVIVAL);
-    if (r.finished && Item(r.finished).special == SP_MILK)
-        MilkDrunk(ped, fireResistance);
-    return r.eating;
 }
 
 // ---------------------------------------------------------------- health: armour, totem, hurt flash
@@ -477,12 +468,8 @@ void GameProcess() {
             if (!gGta.enabled)
                 SetGtaHud(false);
         }
-        if (gGta.enabled && ActionPressed(ACT_GAME_MODE)) {
-            gGame.gameMode = gGame.gameMode == MODE_SURVIVAL ? MODE_CREATIVE : MODE_SURVIVAL;
-            ShowMessage(gGame.gameMode == MODE_CREATIVE ? "Oyun modu: Yarat\xC4\xB1" "c\xC4\xB1"
-                                                        : "Oyun modu: Hayatta Kalma");
-            gWorld.dirty = true;
-        }
+        if (gGta.enabled)
+            GameKeysTick();
         if (KeyPressed(gConfig.keyRadar)) {
             gConfig.showRadar = !gConfig.showRadar;
             SaveConfigValue("Settings", "ShowRadar", gConfig.showRadar ? "1" : "0");
@@ -492,12 +479,6 @@ void GameProcess() {
             gGta.steve = !gGta.steve;
             ShowMessage(gGta.steve ? "Karakter: Steve" : "Karakter: CJ");
             gWorld.dirty = true;
-        }
-        if (gGta.enabled && ActionPressed(ACT_PERSPECTIVE)) {
-            // Minecraft order: first person -> third person back -> third person front
-            gGame.cameraMode = gGame.cameraMode == CAM_FIRST ? CAM_THIRD_BACK
-                             : gGame.cameraMode == CAM_THIRD_BACK ? CAM_THIRD_FRONT
-                                                                  : CAM_FIRST;
         }
     }
 
@@ -532,143 +513,44 @@ void GameProcess() {
     LightningTick(dt);
     UpdateCarBoost(dt, ped);
 
-    // ------------------------------------------------ open screen
+    // ------------------------------------------------ the hands (the core's HandsTick); GTA's buttons around them
     if (gGame.screen != SCREEN_NONE) {
         float sx = CPad::NewMouseControllerState.x * 1.5f * gConfig.mouseSensitivity;
         float sy = CPad::NewMouseControllerState.y * 1.5f * gConfig.mouseSensitivity * (CMenuManager::bInvertMouseY ? -1.0f : 1.0f);
         gGame.cursorX = Clamp(gGame.cursorX + sx, 0.0f, (float)RsGlobal.maximumWidth - 1);
         gGame.cursorY = Clamp(gGame.cursorY + sy, 0.0f, (float)RsGlobal.maximumHeight - 1);
         GuiProcessInput();
-        if (ActionPressed(ACT_INVENTORY) || ActionPressed(ACT_BACK) || !alive)
-            CloseScreen();
-        BlockAllPadInput();
-        return;
     }
-
-    // ------------------------------------------------ hotbar (also while driving)
-    if (alive) {
-        HotbarTick();
+    HandsFacts f;
+    f.alive = alive;
+    f.inVehicle = inVehicle;
+    f.vehicleGuns = inVehicle && VehicleHasGuns(ped->m_pVehicle); // (in a tank or a gunship the attack button fires)
+    f.sneaking = ped->bIsDucking;
+    f.swapKeyFree = !ActionPressed(ACT_SWAP_HANDS) || !NearVehicle(ped, 5.0f); // (next to a car GTA gets in with it)
+    if (gGame.screen == SCREEN_NONE && alive) {
         // the wheel belongs to the hotbar, not to the radio / weapons
         CPad::NewMouseControllerState.wheelUp = 0;
         CPad::NewMouseControllerState.wheelDown = 0;
+        // the hands work at the wheel as they do on foot: GTA keeps only what the hands do not use
+        if (inVehicle) {
+            BlockVehicleInput(f.vehicleGuns);
+        } else {
+            BlockActionInput();
+            LateMovementInput(ped);
+        }
     }
-
-    if (!alive) {
-        StopMining();
-        gGame.bowDraw = gGame.crossbowCharge = gGame.tridentCharge = -1.0f;
-        gSurvival.eatTimer = 0.0f;
-        gGame.spyglass = false;
-        return;
+    const HandsResult r = HandsTick(dt, f);
+    if (r.finished && Item(r.finished).special == SP_MILK)
+        MilkDrunk(ped, r.hadFireResistance);
+    if (r.aimed) {
+        if (gTarget.valid && gTarget.outline && (gTarget.voxel || gTarget.virtualBlock != ID_AIR)) {
+            gTargetVisual.show = true;
+            gTargetVisual.pos = gTarget.pos;
+        }
+        gTargetVisual.progress = MiningProgress();
     }
-    // the hands work at the wheel as they do on foot: breaking, placing, using, fighting
-    const bool gunVehicle = inVehicle && VehicleHasGuns(ped->m_pVehicle);
-    if (inVehicle) {
-        BlockVehicleInput(gunVehicle);
-    } else {
-        BlockActionInput();
-        LateMovementInput(ped);
-    }
-
-    if (ActionPressed(ACT_INVENTORY)) {
-        OpenScreen(gGame.gameMode == MODE_CREATIVE ? SCREEN_CREATIVE : SCREEN_INVENTORY);
+    if (r.blockPad)
         BlockAllPadInput();
-        return;
-    }
-    if (ActionPressed(ACT_SWAP_HANDS) && !NearVehicle(ped, 5.0f)) // (next to a car GTA uses the key to get in)
-        SwapHands();
-    if (ActionPressed(ACT_DROP) && !inVehicle) // (at the wheel the key looks to the side)
-        DropHeldItem(ActionDown(ACT_DROP_STACK));
-
-    // ------------------------------------------------ look at / fight / mine / place
-    UpdateTarget();
-    if (gTarget.valid && gTarget.outline && (gTarget.voxel || gTarget.virtualBlock != ID_AIR)) {
-        gTargetVisual.show = true;
-        gTargetVisual.pos = gTarget.pos;
-    }
-    if (ActionPressed(ACT_PICK_BLOCK))
-        PickBlock();
-
-    const bool targetIsContainer = TargetIsContainer();
-
-    // the off hand gets the right click when the main hand has no use for it
-    const bool useOff = !HasRightClickUse(gInv.Held()) && !gInv.offhand.Empty();
-    if (useOff) {
-        std::swap(gInv.slots[gInv.selected], gInv.offhand);
-        gGame.offhandActive = true;
-    }
-    struct SwapBack {
-        bool on;
-        ~SwapBack() {
-            if (on) {
-                std::swap(gInv.slots[gInv.selected], gInv.offhand);
-                gGame.offhandActive = false;
-            }
-        }
-    } swapBack{ useOff };
-    ItemStack& useItem = gInv.Held();
-
-    // bow, crossbow, trident, spyglass; then food
-    const bool rmb = ActionDown(ACT_USE) && !targetIsContainer;
-    const bool charging = ChargedItemsTick(dt, rmb, ActionPressed(ACT_USE) && !targetIsContainer);
-    const bool eating = !charging && UpdateEating(dt, ped, rmb);
-
-    // use
-    if (ActionPressed(ACT_USE) && !charging) {
-        bool used = false;
-        if (targetIsContainer && !ped->bIsDucking) {
-            OpenTargetContainer();
-            used = true;
-        }
-        const float targetDist = gTarget.valid ? (gTarget.point - gGame.rayOrigin).Length() : 1e9f;
-        const float reach = (gGame.eyePos - gGame.rayOrigin).Length() + 4.0f;
-        if (!used && !eating && !inVehicle) {
-            // a villager under the crosshair: trade
-            PedHit ph = RaycastPeds(gGame.rayOrigin, gGame.lookDir, reach, ped, false);
-            if (ph.ped && (ph.point - gGame.eyePos).Magnitude() <= 4.0f && ph.dist <= targetDist)
-                used = VillagerInteract(ph.ped);
-        }
-        if (!used && !inVehicle) {
-            // an animal under the crosshair: shear, milk, feed, saddle or ride it
-            MobHit mh = MobsRaycast(gGame.rayOrigin, gGame.lookDir, reach);
-            if (mh.index >= 0 && (mh.point - gGame.eyePos).Length() <= 4.0f && mh.dist <= targetDist)
-                used = MobInteract(mh.index, true);
-        }
-        if (!used && !eating)
-            used = UseWorldItem();
-        if (!used && !eating)
-            used = UseHeldItem();
-        if (gGame.screen != SCREEN_NONE) {
-            BlockAllPadInput();
-            return;
-        }
-        if (!used && !eating)
-            PlaceHeldBlock();
-    } else if (ActionDown(ACT_USE) && PlaceReady() && !eating && !charging && !targetIsContainer &&
-               IsBlockItem(useItem.id)) {
-        PlaceHeldBlock();
-    }
-    gGame.usingOffhand = useOff && (eating || charging);
-    if (useOff) {
-        // back to the main hand for fighting and mining
-        swapBack.on = false;
-        std::swap(gInv.slots[gInv.selected], gInv.offhand);
-        gGame.offhandActive = false;
-    }
-
-    // attack, otherwise mine (in a tank or a gunship the button fires its guns instead)
-    const bool attackHeld = ActionDown(ACT_ATTACK) && !gunVehicle;
-    if (ActionPressed(ACT_ATTACK) && !gunVehicle) {
-        gMeleeHeld = MeleeAttack();
-        if (!gMeleeHeld) {
-            StartSwing();
-            if (!gTarget.valid)
-                gGame.attackTimer = 0.0f; // swinging at the air also resets the cooldown
-        }
-    }
-    if (!attackHeld)
-        gMeleeHeld = false;
-    MineTick(dt, attackHeld && !gMeleeHeld);
-    gTargetVisual.progress = MiningProgress();
 }
 
 // ---------------------------------------------------------------- camera
