@@ -78,4 +78,14 @@ uint16_t RandomFlower();
 // cell a plant sits in when placed on the host's ground with its surface at `groundZ`
 int PlantCellOnGround(float groundZ);
 
+// ---- lava and fire near the player: they pop, smoke and crackle (LiquidBlock / FireBlock animateTick)
+struct HotBlock {
+    Int3 p;
+    bool lava;
+    float d2; // squared distance to the player
+};
+void HeatTick(float dt, const Vec3& playerPos);
+const std::vector<HotBlock>& HotBlocks(); // nearest first
+int HotBlockAt(const Vec3& p);            // ID_FIRE, ID_LAVA (our fluid) or ID_AIR
+
 } // namespace mc

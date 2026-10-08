@@ -4,6 +4,7 @@
 
 #include "GameTables.h"
 #include "Mobs.h"
+#include "World.h"
 #include "Villagers.h"
 #include "Pose.h"
 #include "generated/Assets.h"
@@ -138,5 +139,16 @@ struct NpcAnim {
     int variant = 0; // villager profession
 };
 void DrawNpc(int kind, const Pose& base, const NpcAnim& a, float light, float r, float g, float b);
+
+// ---------------------------------------------------------------- items in the GUI
+// An item's picture in a slot, 16x16 GUI pixels: one atlas tile, or a little cube of three faces for a block.
+struct IconQuad {
+    float x[4], y[4];
+    uint16_t tile;
+    uint32_t color;
+};
+int ItemIcon(uint16_t id, IconQuad out[3]); // how many quads
+// the bar under a worn tool: `width` of its 13 pixels, in its colour (green when new, red when nearly broken)
+bool DurabilityBar(const ItemStack& st, int* width, uint32_t* color);
 
 } // namespace mc

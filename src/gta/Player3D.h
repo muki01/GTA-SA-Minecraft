@@ -10,9 +10,7 @@ void RenderPlayerModel(float light);
 void RenderPlayerInVehicle(float light);
 // First-person arm / held item, drawn on top of the world (2D phase).
 void RenderFirstPersonHand();
-// Called once per frame from the script phase to advance animation values.
+// Called once per frame from the script phase: the core's animation clocks (PlayerAnimTick).
 void UpdatePlayerAnimation(float dt);
-// Sprite shown instead of the item's own one (drawn bow, cast fishing rod), -1 = none.
-int HeldItemTile(uint16_t id);
 
 } // namespace mc

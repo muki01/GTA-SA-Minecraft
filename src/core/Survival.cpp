@@ -425,4 +425,36 @@ bool HealthTick(float dt, float& health, float maxHealth, float direct) {
     return totem;
 }
 
+// ---------------------------------------------------------------- bubbles
+namespace {
+float gBubbleTimer = 0.0f;
+
+void Bubbles(const Vec3& at, int n) {
+    for (int i = 0; i < n; ++i) {
+        Particle p;
+        p.pos = at + Vec3((Rand01() - 0.5f) * 0.4f, (Rand01() - 0.5f) * 0.4f, (Rand01() - 0.5f) * 0.3f);
+        p.vel = Vec3((Rand01() - 0.5f) * 0.4f, (Rand01() - 0.5f) * 0.4f, 0.8f + Rand01() * 0.8f);
+        p.maxLife = p.life = 0.6f + Rand01() * 0.6f;
+        p.tile = TILE_P_BUBBLE;
+        p.size = 0.04f + Rand01() * 0.03f;
+        p.gravity = -1.0f;
+        SpawnParticle(p);
+    }
+}
+} // namespace
+
+void BreathEffects(float dt, bool bubbling, bool drowned) {
+    if (drowned) {
+        NoteDamage(STR_DEATH_DROWN);
+        Bubbles(gGame.eyePos, 8);
+    }
+    if (bubbling) {
+        gBubbleTimer -= dt;
+        if (gBubbleTimer <= 0.0f) {
+            gBubbleTimer = 0.9f + Rand01() * 0.8f;
+            Bubbles(gGame.eyePos + gGame.lookDir * 0.25f - Vec3(0, 0, 0.1f), 2);
+        }
+    }
+}
+
 } // namespace mc

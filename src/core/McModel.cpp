@@ -832,4 +832,39 @@ void DrawNpc(int kind, const Pose& base, const NpcAnim& a, float light, float r,
     McCube(Part(base, 2, 12, 0, lLeg, -legY, 0), -2, 0, -2, 4, 12, 4, 0, 22, st, 0, true);
 }
 
+// ---------------------------------------------------------------- items in the GUI
+int ItemIcon(uint16_t id, IconQuad out[3]) {
+    if (!IsValidItem(id))
+        return 0;
+    if (IsBlockItem(id) && Block(id).shape == SHAPE_CROSS) {
+        out[0] = { { 0, 16, 16, 0 }, { 0, 0, 16, 16 }, (uint16_t)Block(id).tex[0], 0xFFFFFFFF };
+        return 1;
+    }
+    if (IsBlockItem(id)) {
+        // the block seen from above, south-east (GUI item lighting: top 1, south 0.8, east 0.6)
+        int meta = Block(id).shape == SHAPE_FACING ? 2 : 0;
+        out[0] = { { 0.93f, 8.0f, 15.07f, 8.0f }, { 3.69f, 0.15f, 3.69f, 7.22f }, BlockFaceTile(id, FACE_TOP, meta), Argb(255, 255, 255) };
+        out[1] = { { 0.93f, 8.0f, 8.0f, 0.93f }, { 3.69f, 7.22f, 15.88f, 12.35f }, BlockFaceTile(id, FACE_SOUTH, meta), Argb(204, 204, 204) };
+        out[2] = { { 8.0f, 15.07f, 15.07f, 8.0f }, { 7.22f, 3.69f, 12.35f, 15.88f }, BlockFaceTile(id, FACE_EAST, meta), Argb(153, 153, 153) };
+        return 3;
+    }
+    out[0] = { { 0, 16, 16, 0 }, { 0, 0, 16, 16 }, (uint16_t)Item(id).tile, 0xFFFFFFFF };
+    return 1;
+}
+
+bool DurabilityBar(const ItemStack& st, int* width, uint32_t* color) {
+    if (st.Empty())
+        return false;
+    const ItemDef& d = Item(st.id);
+    if (!d.durability || st.damage == 0)
+        return false;
+    float frac = Clamp(1.0f - (float)st.damage / d.durability, 0.0f, 1.0f);
+    *width = (int)std::round(13.0f * frac);
+    // Minecraft: hue from red (0) to green (1/3)
+    float h = frac / 3.0f * 6.0f;
+    int r = (int)(255 * Clamp(2.0f - h, 0.0f, 1.0f)), g = (int)(255 * Clamp(h, 0.0f, 1.0f));
+    *color = Argb(r, g, 0);
+    return true;
+}
+
 } // namespace mc

@@ -60,6 +60,8 @@ float AbsorbDamage(float loss, float maxHealth);
 
 // ---- air: ten bubbles that run out under water, then a drowning hit every second
 void BreathTick(float dt, bool underWater, bool mortal, float& health, float maxHealth, SurvivalEvents& ev);
+// bubbles from the player's mouth under water (`bubbling`), and the burst when he drowns
+void BreathEffects(float dt, bool bubbling, bool drowned);
 
 // ---- hunger
 // Exhaustion eats saturation, then food; every four seconds a full stomach heals and an empty one starves (down

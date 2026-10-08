@@ -18,6 +18,7 @@
 #include "Game.h"
 #include "McModel.h"
 #include "Player3D.h"
+#include "PlayerAnim.h"
 #include "Render3D.h"
 #include "Sound.h"
 #include "Textures.h"
@@ -248,12 +249,10 @@ void DrawPedNpc(CPed* p, const Look& l, float light) {
     }
     float r = 1.0f, g = 1.0f, b = 1.0f;
     if (l.death >= 0.0f && !riding) {
-        float f = std::min(1.0f, std::sqrt(l.death * 1.6f));
-        float a = f * (kPi / 2.0f);
-        CVector r2 = right * std::cos(a) + up * std::sin(a);
-        CVector u2 = up * std::cos(a) - right * std::sin(a);
-        right = r2;
-        up = u2;
+        Vec3 r2 = right, u2 = up;
+        DeathTilt(l.death, r2, u2);
+        right = ToGta(r2);
+        up = ToGta(u2);
     }
     if (l.hurt > 0.0f || (l.death >= 0.0f && l.death < 1.0f)) {
         g = 0.45f;

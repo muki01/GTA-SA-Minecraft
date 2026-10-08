@@ -14,7 +14,7 @@
 #include "Game.h"
 #include "Gui2D.h"
 #include "Hud.h"
-#include "Items.h"
+#include "McModel.h"
 #include "Screens.h"
 #include "Textures.h"
 
@@ -143,35 +143,17 @@ void AtlasQuad4(int tile, const float* xs, const float* ys, RwUInt32 col) {
     Quad4(xs, ys, us, vs, col);
 }
 
+// the core's picture of the item (ItemIcon), GUI pixels times the scale
 void DrawItemIcon(uint16_t id, float x, float y, float s) {
-    if (!IsValidItem(id))
-        return;
-    if (IsBlockItem(id) && Block(id).shape == SHAPE_CROSS) {
-        float xs[4] = { x, x + 16 * s, x + 16 * s, x };
-        float ys[4] = { y, y, y + 16 * s, y + 16 * s };
-        AtlasQuad4(Block(id).tex[0], xs, ys, 0xFFFFFFFF);
-    } else if (IsBlockItem(id)) {
-        int meta = Block(id).shape == SHAPE_FACING ? 2 : 0;
-        auto P = [&](float px) { return px * s; };
-        {
-            float xs[4] = { x + P(0.93f), x + P(8.0f), x + P(15.07f), x + P(8.0f) };
-            float ys[4] = { y + P(3.69f), y + P(0.15f), y + P(3.69f), y + P(7.22f) };
-            AtlasQuad4(BlockFaceTile(id, FACE_TOP, meta), xs, ys, 0xFFFFFFFF);
+    IconQuad q[3];
+    const int n = ItemIcon(id, q);
+    for (int i = 0; i < n; ++i) {
+        float xs[4], ys[4];
+        for (int k = 0; k < 4; ++k) {
+            xs[k] = x + q[i].x[k] * s;
+            ys[k] = y + q[i].y[k] * s;
         }
-        {
-            float xs[4] = { x + P(0.93f), x + P(8.0f), x + P(8.0f), x + P(0.93f) };
-            float ys[4] = { y + P(3.69f), y + P(7.22f), y + P(15.88f), y + P(12.35f) };
-            AtlasQuad4(BlockFaceTile(id, FACE_SOUTH, meta), xs, ys, Argb(204, 204, 204));
-        }
-        {
-            float xs[4] = { x + P(8.0f), x + P(15.07f), x + P(15.07f), x + P(8.0f) };
-            float ys[4] = { y + P(7.22f), y + P(3.69f), y + P(12.35f), y + P(15.88f) };
-            AtlasQuad4(BlockFaceTile(id, FACE_EAST, meta), xs, ys, Argb(153, 153, 153));
-        }
-    } else {
-        float xs[4] = { x, x + 16 * s, x + 16 * s, x };
-        float ys[4] = { y, y, y + 16 * s, y + 16 * s };
-        AtlasQuad4(Item(id).tile, xs, ys, 0xFFFFFFFF);
+        AtlasQuad4(q[i].tile, xs, ys, q[i].color);
     }
 }
 
@@ -179,15 +161,11 @@ void DrawStack(const ItemStack& st, float x, float y, float s) {
     if (st.Empty())
         return;
     DrawItemIcon(st.id, x, y, s);
-    const ItemDef& d = Item(st.id);
-    if (d.durability && st.damage > 0) {
-        float frac = Clamp(1.0f - (float)st.damage / d.durability, 0.0f, 1.0f);
-        int w = (int)std::round(13.0f * frac);
+    int w = 0;
+    uint32_t col = 0;
+    if (DurabilityBar(st, &w, &col)) {
         FillRect(x + 2 * s, y + 13 * s, x + 15 * s, y + 15 * s, Argb(0, 0, 0));
-        // Minecraft: hue from red (0) to green (1/3)
-        float h = frac / 3.0f * 6.0f;
-        int r = (int)(255 * Clamp(2.0f - h, 0.0f, 1.0f)), g = (int)(255 * Clamp(h, 0.0f, 1.0f));
-        FillRect(x + 2 * s, y + 13 * s, x + (2 + w) * s, y + 14 * s, Argb(r, g, 0));
+        FillRect(x + 2 * s, y + 13 * s, x + (2 + w) * s, y + 14 * s, col);
     }
     if (st.count > 1) {
         char buf[8];

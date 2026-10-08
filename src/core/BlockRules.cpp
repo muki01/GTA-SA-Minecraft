@@ -1,5 +1,7 @@
 #include "BlockRules.h"
 
+#include <algorithm>
+
 #include <cstdlib>
 #include <unordered_set>
 
@@ -8,6 +10,11 @@
 #include "Particles.h"
 
 namespace mc {
+
+namespace {
+std::vector<HotBlock> gHot; // lava surfaces and fires near the player
+float gHotTimer = 0.0f;
+} // namespace
 
 namespace {
 std::vector<FallingBlock> gFalling;
@@ -498,6 +505,7 @@ void GrowthSparkles(const Vec3& at, int n) {
 const std::vector<FallingBlock>& FallingBlocks() { return gFalling; }
 
 void BlockRulesClear() {
+    gHot.clear();
     gFalling.clear();
     gFluidQueue.clear();
     gFluidScheduled.clear();
@@ -712,5 +720,91 @@ bool IsSoil(int b) {
     return b == ID_GRASS_BLOCK || b == ID_DIRT || b == ID_PODZOL || b == ID_COARSE_DIRT || b == ID_MYCELIUM ||
            b == ID_MOSS_BLOCK || b == ID_MUD;
 }
+
+// ---------------------------------------------------------------- lava and fire near the player
+namespace {
+
+} // namespace
+
+int HotBlockAt(const Vec3& p) {
+    const int b = gWorld.GetBlock(FloorI(p.x), FloorI(p.y), FloorI(p.z));
+    if (b == ID_FIRE)
+        return ID_FIRE;
+    return FluidAt(p) == ID_LAVA ? ID_LAVA : ID_AIR;
+}
+
+namespace {
+void CollectHot(const Vec3& at) {
+    gHot.clear();
+    for (const Int3& p : gWorld.ticking) {
+        const float dx = p.x + 0.5f - at.x, dy = p.y + 0.5f - at.y, dz = p.z + 0.5f - at.z;
+        const float d2 = dx * dx + dy * dy + dz * dz;
+        if (d2 > 48.0f * 48.0f)
+            continue;
+        const int b = gWorld.GetBlock(p.x, p.y, p.z);
+        if (b == ID_FIRE)
+            gHot.push_back({ p, false, d2 });
+        else if (b == ID_LAVA && gWorld.GetBlock(p.x, p.y, p.z + 1) != ID_LAVA)
+            gHot.push_back({ p, true, d2 });
+    }
+    std::sort(gHot.begin(), gHot.end(), [](const HotBlock& a, const HotBlock& b) { return a.d2 < b.d2; });
+    if (gHot.size() > 400)
+        gHot.resize(400);
+}
+
+// LiquidBlock / FireBlock animateTick: popping lava, smoking fire and their sounds
+void AnimateHot(float dt) {
+    for (const HotBlock& h : gHot) {
+        const Vec3 c(h.p.x + 0.5f, h.p.y + 0.5f, h.p.z + 0.5f);
+        if (h.d2 > 32.0f * 32.0f)
+            continue;
+        if (h.lava) {
+            if (Rand01() < 0.12f * dt) {
+                // LiquidBlock.animateTick: a glowing drop pops out of the surface
+                const float top = (float)h.p.z + FluidOwnHeight(gWorld.Get(h.p.x, h.p.y, h.p.z));
+                Particle s;
+                s.pos = Vec3(h.p.x + Rand01(), h.p.y + Rand01(), top);
+                s.vel = Vec3((Rand01() - 0.5f) * 2.0f, (Rand01() - 0.5f) * 2.0f, 3.0f + Rand01() * 3.0f);
+                s.maxLife = s.life = 1.0f + Rand01() * 1.5f;
+                s.tile = TILE_P_LAVA;
+                s.size = 0.06f + Rand01() * 0.05f;
+                s.gravity = 14.0f;
+                s.glow = true;
+                SpawnParticle(s);
+                if (Rand01() < 0.6f)
+                    PlaySfx(SND_LAVA_POP, &s.pos, 0.2f + Rand01() * 0.2f, 0.9f + Rand01() * 0.15f);
+            }
+            if (Rand01() < 0.02f * dt)
+                PlaySfx(SND_LAVA_AMBIENT, &c, 0.2f + Rand01() * 0.2f, 0.9f + Rand01() * 0.15f);
+        } else {
+            if (Rand01() < 2.5f * dt) {
+                Particle s;
+                s.pos = Vec3(h.p.x + Rand01(), h.p.y + Rand01(), h.p.z + 0.5f + Rand01() * 0.6f);
+                s.vel = Vec3(0, 0, 0.8f + Rand01());
+                s.maxLife = s.life = 1.2f + Rand01();
+                s.tile = TILE_P_GENERIC_0;
+                s.anim = 2;
+                s.size = 0.18f + Rand01() * 0.1f;
+                s.gravity = -0.3f;
+                s.color = 0xFF303030;
+                SpawnParticle(s);
+            }
+            if (Rand01() < 0.5f * dt)
+                PlaySfx(SND_FIRE_AMBIENT, &c, 0.5f + Rand01() * 0.5f, 0.3f + Rand01() * 0.7f);
+        }
+    }
+}
+} // namespace
+
+void HeatTick(float dt, const Vec3& playerPos) {
+    gHotTimer -= dt;
+    if (gHotTimer <= 0.0f) {
+        gHotTimer = 0.5f;
+        CollectHot(playerPos);
+    }
+    AnimateHot(dt);
+}
+
+const std::vector<HotBlock>& HotBlocks() { return gHot; }
 
 } // namespace mc

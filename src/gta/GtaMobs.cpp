@@ -15,6 +15,7 @@
 #include "Inventory.h"
 #include "McModel.h"
 #include "Mobs.h"
+#include "PlayerAnim.h"
 #include "Render3D.h"
 #include "Textures.h"
 
@@ -102,13 +103,10 @@ void MobsRender(float light) {
         CVector right(fwd.y, -fwd.x, 0.0f);
         float r = 1.0f, g = 1.0f, b = 1.0f;
         if (m.death >= 0.0f) {
-            // LivingEntityRenderer: the dead animal tips over onto its side
-            float f = std::min(1.0f, std::sqrt(m.death * 1.6f));
-            float a = f * (kPi / 2.0f);
-            CVector r2 = right * std::cos(a) + up * std::sin(a);
-            CVector u2 = up * std::cos(a) - right * std::sin(a);
-            right = r2;
-            up = u2;
+            Vec3 r2 = right, u2 = up;
+            DeathTilt(m.death, r2, u2); // the dead animal tips over onto its side
+            right = ToGta(r2);
+            up = ToGta(u2);
         }
         if (m.hurt > 0.0f || m.death >= 0.0f) {
             g = 0.45f;

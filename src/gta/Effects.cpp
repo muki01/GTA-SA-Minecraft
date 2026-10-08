@@ -7,26 +7,12 @@
 
 #include "BlockRules.h"
 #include "Game.h"
-#include "Particles.h"
 
 namespace mc {
 
 namespace {
-float gBubbleTimer = 0.0f;
 float gBreathSeen = 0.0f; // GTA's own lung capacity: kept full, our air supply decides
 
-void Bubbles(const CVector& at, int n) {
-    for (int i = 0; i < n; ++i) {
-        Particle p;
-        p.pos = at + CVector((Rand01() - 0.5f) * 0.4f, (Rand01() - 0.5f) * 0.4f, (Rand01() - 0.5f) * 0.3f);
-        p.vel = CVector((Rand01() - 0.5f) * 0.4f, (Rand01() - 0.5f) * 0.4f, 0.8f + Rand01() * 0.8f);
-        p.maxLife = p.life = 0.6f + Rand01() * 0.6f;
-        p.tile = TILE_P_BUBBLE;
-        p.size = 0.04f + Rand01() * 0.03f;
-        p.gravity = -1.0f;
-        SpawnParticle(p);
-    }
-}
 } // namespace
 
 void FireResistanceCleared(CPlayerPed* ped, bool hadIt) {
@@ -63,17 +49,7 @@ void EffectsUpdate(float dt, CPlayerPed* ped) {
                        ((CWaterLevel::GetWaterLevelNoWaves(eye.x, eye.y, eye.z, &wl) && wl > eye.z + 0.05f) ||
                         FluidAt(eye) == ID_WATER);
     BreathTick(dt, under, survival, ped->m_fHealth, maxH, ev);
-    if (ev.drowned) {
-        NoteDamage(STR_DEATH_DROWN);
-        Bubbles(eye, 8);
-    }
-    if (under && survival) {
-        gBubbleTimer -= dt;
-        if (gBubbleTimer <= 0.0f) {
-            gBubbleTimer = 0.9f + Rand01() * 0.8f;
-            Bubbles(eye + gGame.lookDir * 0.25f - CVector(0, 0, 0.1f), 2);
-        }
-    }
+    BreathEffects(dt, under && survival, ev.drowned);
     gGta.directDamage += ev.directDamage;
     // GTA counts the player's breath too and would drown him on its own clock: keep it full
     if (ped->m_pPlayerData) {
