@@ -27,6 +27,8 @@ struct HostHit {
     float dist = 1e9f;      // how far along the line
     Vec3 point;
     int vehicle = -1;       // what was hit is a vehicle (the host's number for it)
+    int object = -1;        // ... or a loose object (its number for it)
+    Vec3 local;             // where on that vehicle / object, in the host's own terms
     int being = -1;         // somebody was hit (the host's number for him); he may sit behind what was hit, in a vehicle
     float beingDist = 1e9f;
     Vec3 beingPoint;
@@ -80,6 +82,10 @@ struct Host {
     virtual void HurtBeing(int being, float halfHearts, int how, const ShotOwner* by) {} // HurtKind; by nullptr: the player
     virtual void PushBeing(int being, const Vec3& velocity) {}               // m/s added to somebody on foot
     virtual void HurtVehicle(int vehicle, float halfHearts) {}
+    // ---- the fishing hook
+    virtual HostHit HookTrace(const Vec3& from, const Vec3& dir, float len) { return HostHit(); } // in the way of the flying hook
+    virtual bool HookPoint(const HostHit& hooked, Vec3* at) { return false; } // where the hook on its thing is now (false: gone)
+    virtual bool Fling(const HostHit& what, const Vec3& velocity) { return false; } // throws it through the air (false: gone)
     // a burst of wind throws its people, vehicles and loose things away from `centre` (the player too when asked)
     virtual void Gust(const Vec3& centre, float radius, float side, float up, bool playerToo) {}
     // ---- what only the host can do

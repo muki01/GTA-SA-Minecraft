@@ -14,15 +14,10 @@ void PedSkinsUpdate(float dt, CPlayerPed* player); // script phase: hides the GT
 void PedSkinsAfterProcess(CPlayerPed* player);     // after the world moved: skeletons of the hidden peds
 void PedSkinsRender(float light);            // peds on foot
 void RenderVehicleOccupants(CVehicle* veh);  // drivers / passengers, before their vehicle is drawn
-void PedSkinsRestore(); // show the GTA models again
 void PedSkinsForget();  // the game deleted all peds (new game / load)
 
 // Switches a ped's GTA model on / off.
 void SetPedDrawn(CPed* ped, bool drawn);
-// A hidden ped is not pre-rendered, so GTA stops updating its skeleton (and the hit spheres that
-// bullets, arrows and fists test against). This brings it up to date.
-void UpdatePedBones(CPed* ped);
-
 // Seated in a vehicle: where the hip is and how small a model must be so its head stays under the roof.
 // headAboveHipPx = model pixels from the hip to the top of the head.
 float SeatedFit(CPed* ped, const CVector& up, float headAboveHipPx, CVector* hip);

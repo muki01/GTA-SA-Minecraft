@@ -2,7 +2,7 @@
 #include "McModel.h"
 
 #include "Draw3D.h"
-#include "Game.h"
+#include "GameState.h"
 #include "Items.h"
 #include "Textures.h"
 

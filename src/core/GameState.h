@@ -88,6 +88,7 @@ struct GameRules {
     bool explosionsBreakBlocks = true;
     bool animals = true;   // herds appear around the player
     int maxAnimals = 14;   // wild ones at a time
+    bool keepInventory = true; // the player keeps his things when he dies
 };
 extern GameRules gRules;
 
@@ -95,6 +96,10 @@ extern GameRules gRules;
 void OpenScreen(int screen, const Int3& pos = {});
 // what is left on the crafting grid or on the cursor goes back into the inventory, or on the ground
 void CloseScreen();
+// the host saw the player die: what Minecraft does then (his things fall out unless the rules keep them)
+void PlayerDied(const Vec3& at);
+// a fresh world: something to start with
+void GiveStarterKit();
 // puts a stack into the world in front of the player (thrown: flung forward)
 void DropStackAtPlayer(const ItemStack& s, bool thrown);
 

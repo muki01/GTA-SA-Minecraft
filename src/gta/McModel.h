@@ -4,6 +4,7 @@
 
 #include "GameTables.h"
 #include "Mobs.h"
+#include "Villagers.h"
 #include "Pose.h"
 #include "generated/Assets.h"
 
@@ -119,7 +120,6 @@ struct MobAnim {
 };
 void DrawMob(int kind, const Pose& base, const MobAnim& a, float light, float r, float g, float b);
 
-enum NpcKind { NPC_VILLAGER = 0, NPC_PILLAGER, NPC_VINDICATOR };
 struct NpcAnim {
     float limbSwing = 0, limbAmount = 0;
     float headYaw = 0, headPitch = 0;

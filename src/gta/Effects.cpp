@@ -7,8 +7,7 @@
 
 #include "BlockRules.h"
 #include "Game.h"
-#include "Items.h"
-#include "Render3D.h"
+#include "Particles.h"
 
 namespace mc {
 

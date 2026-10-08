@@ -26,6 +26,7 @@ struct Survival {
     float foodTimer = 0.0f;
     float absorption = 0.0f;  // yellow hearts, in Minecraft health points (half hearts)
     float air = kMaxAir;      // ticks of air left under water
+    float healthSeen = -1.0f; // the host's health at the last look (<0: not looked at yet)
     float eatTimer = 0.0f;    // seconds the player has been eating what is in the hand
     float eatSoundTimer = 0.0f;
     EffectState effects[EFFECT_COUNT];
@@ -64,6 +65,10 @@ void BreathTick(float dt, bool underWater, bool mortal, float& health, float max
 // Exhaustion eats saturation, then food; every four seconds a full stomach heals and an empty one starves (down
 // to a tenth of full health). True when that four-second check was made.
 bool HungerTick(float dt, float& health, float maxHealth, SurvivalEvents& ev);
+// Once a frame, with the host's health (`direct`: what poison and drowning took since the last call, which nothing
+// blocks): what the host took away gets Minecraft's armour, resistance and absorption, then a totem of undying may
+// save the player; while he is dead the death screen's clock runs. True when a totem saved him.
+bool HealthTick(float dt, float& health, float maxHealth, float direct);
 void CreativeTick(float& health, float maxHealth); // creative: never hungry, never hurt for long
 inline bool TooHungryToSprint() { return gSurvival.food <= 6.0f; }
 

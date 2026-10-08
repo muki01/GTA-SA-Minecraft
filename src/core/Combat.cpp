@@ -5,6 +5,7 @@
 #include "Audio.h"
 #include "BlockRules.h"
 #include "Entities.h"
+#include "Fishing.h"
 #include "GameState.h"
 #include "Host.h"
 #include "Interact.h"
@@ -618,9 +619,10 @@ bool UseHeldItem() {
         StartSwing();
         return true;
     }
-    case SP_WAND: // items of the host's own
-    case SP_FISHING_ROD:
+    case SP_WAND: // an item of the host's own
         return TheHost().ItemUse(d.special);
+    case SP_FISHING_ROD:
+        return !inVehicle && FishingUse();
     case SP_EGG_COW:
     case SP_EGG_PIG:
     case SP_EGG_SHEEP:
@@ -996,26 +998,6 @@ void ShootArrowAt(const Vec3& from, const Vec3& to, int shooter, int vehicle) {
     pr.vehicle = vehicle;
     gProjectiles.push_back(pr);
     PlaySfx(SND_CROSSBOW_SHOOT, &from, 1.5f, 0.9f + Rand01() * 0.2f);
-}
-
-void DropVillagerLoot(const Vec3& at, bool illager) {
-    SpawnXp(at, illager ? 5 + rand() % 3 : 1 + rand() % 5);
-    struct Loot { uint16_t id; int maxCount; float chance; };
-    if (illager) {
-        // pillager loot
-        const Loot loot[] = { { ID_ARROW, 3, 0.7f }, { ID_EMERALD, 1, 0.35f }, { ID_CROSSBOW, 1, 0.09f },
-                              { ID_IRON_INGOT, 1, 0.15f } };
-        for (auto& l : loot)
-            if (Rand01() < l.chance)
-                SpawnDropItem(at, l.id, 1 + rand() % l.maxCount);
-    } else {
-        const Loot loot[] = { { ID_ROTTEN_FLESH, 2, 0.45f }, { ID_BONE, 2, 0.3f }, { ID_STRING, 2, 0.35f },
-                              { ID_GUNPOWDER, 2, 0.35f }, { ID_ARROW, 3, 0.3f }, { ID_PAPER, 2, 0.15f },
-                              { ID_BREAD, 2, 0.25f }, { ID_EMERALD, 1, 0.12f } };
-        for (auto& l : loot)
-            if (Rand01() < l.chance)
-                SpawnDropItem(at, l.id, 1 + rand() % l.maxCount);
-    }
 }
 
 void CombatClear() {

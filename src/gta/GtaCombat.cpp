@@ -19,7 +19,6 @@
 #include "Combat.h"
 #include "Config.h"
 #include "Draw3D.h"
-#include "Fishing.h"
 #include "Game.h"
 #include "Items.h"
 #include "McModel.h"
@@ -31,6 +30,7 @@
 #include "Sound.h"
 #include "Terrain.h"
 #include "Textures.h"
+#include "Villagers.h"
 
 // The GTA side of fighting: who and what a blow or a shot meets on the GTA map, hurting GTA's people and vehicles, the
 // magic stick, the rocket strapped to a car, the loot of the dead, drawing what flies, and the engine hooks. The blows,
@@ -389,13 +389,10 @@ bool GtaItemUse(int special) {
     CPlayerPed* ped = FindPlayerPed();
     if (!ped)
         return false;
-    if (special == SP_WAND) {
-        WandShockwave(ped);
-        return true;
-    }
-    if (special == SP_FISHING_ROD)
-        return !(ped->bInVehicle && ped->m_pVehicle) && FishingUse(ped);
-    return false;
+    if (special != SP_WAND)
+        return false;
+    WandShockwave(ped);
+    return true;
 }
 
 // ================================================================ public

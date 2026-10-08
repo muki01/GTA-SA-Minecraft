@@ -3,7 +3,6 @@
 // plants that need ground, growing saplings) are the core's: src/core/BlockRules.h, included here.
 
 #include "ModCommon.h"
-#include "BlockRules.h"
 
 namespace mc {
 

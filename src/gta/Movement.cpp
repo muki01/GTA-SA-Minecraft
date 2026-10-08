@@ -22,7 +22,6 @@
 #include "GtaWorld.h"
 #include "Controls.h"
 #include "Inventory.h"
-#include "Items.h"
 #include "Mobs.h"
 #include "Physics.h"
 #include "Sound.h"

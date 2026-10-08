@@ -31,7 +31,6 @@ void GameProcess();       // script phase, before the world moves
 void GameAfterProcess();  // after CGame::Process: camera override, visibility
 void GameOnNewSession();
 void GameShutdown();
-void SaveAll();
 
 // worlds: every GTA save game has its own Minecraft world (blocks, inventory, experience)
 void SetNextWorld(int id, bool fresh);  // the session that starts next plays world `id` (0 = a new world, 1..8 = save slot)

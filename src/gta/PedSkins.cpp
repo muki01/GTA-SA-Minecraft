@@ -16,31 +16,22 @@
 #include "Config.h"
 #include "Draw3D.h"
 #include "Game.h"
-#include "Inventory.h"
-#include "Items.h"
 #include "McModel.h"
 #include "Player3D.h"
 #include "Render3D.h"
 #include "Sound.h"
 #include "Textures.h"
+#include "Villagers.h"
 
 namespace mc {
 
 namespace {
 constexpr float kNpcScale = 0.9375f;
 
-struct Look {
-    int kind = NPC_VILLAGER;
-    int variant = 0; // villager profession
+// a GTA ped as a villager: the core's NpcLook, and what GTA needs on top
+struct Look : NpcLook {
     bool skip = false;   // was already invisible when we first saw it (script / cutscene)
     bool hidden = false; // we switched its GTA model off
-    float limbSwing = 0.0f, limbAmount = 0.0f;
-    float headYaw = 0.0f;
-    float hurt = 0.0f;
-    float lastHealth = -1.0f;
-    float death = -1.0f;
-    float say = 0.0f;
-    int offer = 0;       // trade the villager shows next
     unsigned seen = 0;
 };
 
@@ -100,10 +91,6 @@ CVector Bone(CPed* p, unsigned int id) {
     return CVector(v.x, v.y, v.z);
 }
 
-SoundEvent SayOf(int kind) { return kind == NPC_VILLAGER ? SND_VILLAGER_SAY : SND_PILLAGER_SAY; }
-SoundEvent HurtOf(int kind) { return kind == NPC_VILLAGER ? SND_VILLAGER_HURT : SND_PILLAGER_HURT; }
-SoundEvent DeathOf(int kind) { return kind == NPC_VILLAGER ? SND_VILLAGER_DEATH : SND_PILLAGER_DEATH; }
-
 RpAtomic* AtomicDrawnCB(RpAtomic* atomic, void* data) {
     if (data)
         RpAtomicSetFlags(atomic, RpAtomicGetFlags(atomic) | rpATOMICRENDER);
@@ -112,85 +99,6 @@ RpAtomic* AtomicDrawnCB(RpAtomic* atomic, void* data) {
     return atomic;
 }
 
-// ---------------------------------------------------------------- trading
-struct Offer {
-    uint16_t item;
-    int count;
-    int price; // emeralds
-};
-struct Want {
-    uint16_t item;
-    int count; // for one emerald
-};
-struct Profession {
-    const char* name;
-    Offer sells[5];
-    int numSells;
-    Want buys[4];
-    int numBuys;
-};
-const Profession kProfessions[6] = {
-    { "İşsiz Köylü", {}, 0, {}, 0 },
-    { "Çiftçi",
-      { { ID_BREAD, 6, 1 }, { ID_APPLE, 4, 1 }, { ID_PUMPKIN_PIE, 4, 1 }, { ID_GOLDEN_CARROT, 3, 3 } }, 4,
-      { { ID_WHEAT, 20 }, { ID_CARROT, 22 }, { ID_POTATO, 26 }, { ID_BEETROOT, 15 } }, 4 },
-    { "Kütüphaneci",
-      { { ID_BOOK, 1, 1 }, { ID_GLASS, 4, 1 }, { ID_BOOKSHELF, 1, 9 }, { ID_EXPERIENCE_BOTTLE, 1, 3 } }, 4,
-      { { ID_PAPER, 24 }, { ID_INK_SAC, 5 } }, 2 },
-    { "Kasap",
-      { { ID_COOKED_PORKCHOP, 5, 1 }, { ID_COOKED_CHICKEN, 8, 1 }, { ID_COOKED_BEEF, 5, 1 }, { ID_RABBIT_STEW, 1, 1 } }, 4,
-      { { ID_CHICKEN, 14 }, { ID_PORKCHOP, 7 }, { ID_BEEF, 10 }, { ID_MUTTON, 7 } }, 4 },
-    { "Rahip",
-      { { ID_REDSTONE, 2, 1 }, { ID_LAPIS_LAZULI, 1, 1 }, { ID_GLOWSTONE, 1, 4 }, { ID_ENDER_PEARL, 1, 5 },
-        { ID_EXPERIENCE_BOTTLE, 1, 3 } }, 5,
-      { { ID_ROTTEN_FLESH, 32 }, { ID_GOLD_INGOT, 3 } }, 2 },
-    { "Zırhçı",
-      { { ID_IRON_HELMET, 1, 5 }, { ID_IRON_CHESTPLATE, 1, 9 }, { ID_IRON_LEGGINGS, 1, 7 }, { ID_IRON_BOOTS, 1, 4 },
-        { ID_DIAMOND_CHESTPLATE, 1, 21 } }, 5,
-      { { ID_COAL, 15 }, { ID_IRON_INGOT, 4 }, { ID_DIAMOND, 1 } }, 3 },
-};
-
-std::string OfferText(const Profession& pr, int offer) {
-    std::string s = std::string(pr.name) + ": ";
-    if (pr.numSells > 0) {
-        const Offer& o = pr.sells[((offer % pr.numSells) + pr.numSells) % pr.numSells];
-        s += std::to_string(o.price) + " Zümrüt -> " + std::to_string(o.count) + " " + ItemName(o.item);
-    }
-    if (pr.numBuys > 0) {
-        const Want& w = pr.buys[((offer % pr.numBuys) + pr.numBuys) % pr.numBuys];
-        s += "  |  " + std::to_string(w.count) + " " + ItemName(w.item) + " -> 1 Zümrüt";
-    }
-    return s;
-}
-
-void HappyParticles(const CVector& at) {
-    for (int i = 0; i < 8; ++i) {
-        Particle p;
-        p.pos = at + CVector((Rand01() - 0.5f) * 0.8f, (Rand01() - 0.5f) * 0.8f, Rand01() * 0.6f);
-        p.vel = CVector(0, 0, 0.6f);
-        p.maxLife = p.life = 0.8f;
-        p.tile = TILE_P_ENCHANTED_HIT;
-        p.size = 0.09f;
-        p.gravity = 0.0f;
-        p.color = 0xFF40FF40;
-        p.glow = true;
-        SpawnParticle(p);
-    }
-}
-
-void GiveOrDrop(uint16_t id, int count) {
-    while (count > 0) {
-        ItemStack s;
-        s.id = id;
-        s.count = (uint8_t)std::min(count, MaxStack(id));
-        count -= s.count;
-        int left = gInv.Add(s);
-        if (left > 0) {
-            s.count = (uint8_t)left;
-            DropStackAtPlayer(s, false);
-        }
-    }
-}
 } // namespace
 
 void SetPedDrawn(CPed* ped, bool drawn) {
@@ -201,7 +109,9 @@ void SetPedDrawn(CPed* ped, bool drawn) {
         RpClumpForAllAtomics(ped->m_pRwClump, AtomicDrawnCB, drawn ? (void*)1 : nullptr);
 }
 
-void UpdatePedBones(CPed* ped) {
+// A hidden ped is not pre-rendered, so GTA stops updating its skeleton (and the hit spheres that
+// bullets, arrows and fists test against). This brings it up to date.
+static void UpdatePedBones(CPed* ped) {
     if (ped && ped->m_pRwObject)
         ped->UpdateRpHAnim();
 }
@@ -232,7 +142,8 @@ void PedSkinsForget() {
     gLaunched.clear();
 }
 
-void PedSkinsRestore() {
+// shows the GTA models again
+static void PedSkinsRestore() {
     auto* pool = CPools::ms_pPedPool;
     if (pool) {
         for (auto& kv : gLooks) {
@@ -268,13 +179,8 @@ void PedSkinsUpdate(float dt, CPlayerPed* player) {
         auto it = gLooks.find(ref);
         if (it == gLooks.end()) {
             Look l;
-            l.kind = KindFor(p);
-            l.variant = ProfessionFor(p, i);
+            static_cast<NpcLook&>(l) = NpcStart(KindFor(p), ProfessionFor(p, i), p->m_fHealth, IsDead(p));
             l.skip = !p->bIsVisible;
-            l.lastHealth = p->m_fHealth;
-            l.say = 4.0f + Rand01() * 40.0f;
-            l.death = IsDead(p) ? 10.0f : -1.0f;
-            l.offer = rand() % 5;
             it = gLooks.emplace(ref, l).first;
         }
         Look& l = it->second;
@@ -284,49 +190,15 @@ void PedSkinsUpdate(float dt, CPlayerPed* player) {
         SetPedDrawn(p, false);
         l.hidden = true;
 
-        const CVector pos = p->GetPosition();
-        const float dist = (pos - playerPos).Magnitude();
-        CVector v = p->m_vecMoveSpeed * 50.0f;
-        float speed = p->bInVehicle ? 0.0f : std::sqrt(v.x * v.x + v.y * v.y);
-        float amount = Clamp(speed / 20.0f * 4.0f, 0.0f, 1.0f);
-        l.limbAmount += (amount - l.limbAmount) * Clamp(dt * 8.0f, 0.0f, 1.0f);
-        l.limbSwing += l.limbAmount * 20.0f * dt;
-        l.hurt = std::max(0.0f, l.hurt - dt);
-
-        const bool dead = IsDead(p);
-        if (dead) {
-            if (l.death < 0.0f) {
-                l.death = 0.0f;
-                if (dist < 40.0f)
-                    PlaySfx(DeathOf(l.kind), &pos);
-            }
-            l.death += dt;
-        } else {
-            l.death = -1.0f;
-            if (p->m_fHealth < l.lastHealth - 0.5f) {
-                // (a burning ped loses health every frame: one grunt per flash is enough)
-                if (l.hurt <= 0.0f && dist < 40.0f)
-                    PlaySfx(HurtOf(l.kind), &pos);
-                l.hurt = 0.45f;
-            }
-            l.say -= dt;
-            if (l.say <= 0.0f) {
-                l.say = 15.0f + Rand01() * 45.0f;
-                if (dist < 18.0f && !p->bInVehicle)
-                    PlaySfx(SayOf(l.kind), &pos, 0.8f, 0.9f + Rand01() * 0.2f);
-            }
-        }
-        l.lastHealth = p->m_fHealth;
-
-        // the head follows the player when he is close
-        float wantYaw = 0.0f;
-        if (!dead && !p->bInVehicle && dist < 6.0f && dist > 0.5f) {
-            CVector fwd = Flat(p->GetForward());
-            CVector right(fwd.y, -fwd.x, 0.0f);
-            CVector dir = Flat(playerPos - pos);
-            wantYaw = Clamp(std::atan2(dir.x * right.x + dir.y * right.y, dir.x * fwd.x + dir.y * fwd.y), -1.0f, 1.0f);
-        }
-        l.headYaw += (wantYaw - l.headYaw) * Clamp(dt * 5.0f, 0.0f, 1.0f);
+        NpcFacts f;
+        f.pos = p->GetPosition();
+        f.forward = p->GetForward();
+        const CVector v = p->m_vecMoveSpeed * 50.0f;
+        f.speed = p->bInVehicle ? 0.0f : std::sqrt(v.x * v.x + v.y * v.y);
+        f.health = p->m_fHealth;
+        f.dead = IsDead(p);
+        f.seated = p->bInVehicle;
+        NpcTick(l, dt, f, playerPos);
     }
 
     // forget peds that no longer exist
@@ -528,55 +400,7 @@ bool VillagerInteract(CPed* p) {
     auto it = gLooks.find(pool->GetRef(p));
     if (it == gLooks.end() || it->second.kind != NPC_VILLAGER || HasGun(p))
         return false;
-    Look& l = it->second;
-    const Profession& pr = kProfessions[((l.variant % 6) + 6) % 6];
-    const CVector head = p->GetPosition() + CVector(0, 0, 0.7f);
-    StartSwing();
-    if (pr.numSells == 0 && pr.numBuys == 0) {
-        PlaySfx(SND_VILLAGER_NO, &head);
-        ShowMessage(std::string(pr.name) + ": bu köylünün mesleği yok");
-        return true;
-    }
-    ItemStack& held = gInv.Held();
-    // selling to the villager
-    for (int i = 0; i < pr.numBuys; ++i) {
-        const Want& w = pr.buys[i];
-        if (held.Empty() || held.id != w.item)
-            continue;
-        if (gInv.CountOf(w.item) < w.count) {
-            PlaySfx(SND_VILLAGER_NO, &head);
-            ShowMessage(std::string(pr.name) + ": " + std::to_string(w.count) + " " + ItemName(w.item) + " gerekli");
-            return true;
-        }
-        gInv.Remove(w.item, w.count);
-        GiveOrDrop(ID_EMERALD, 1);
-        PlaySfx(SND_VILLAGER_TRADE, &head);
-        HappyParticles(head);
-        ShowMessage(std::string("Sattın: ") + std::to_string(w.count) + " " + ItemName(w.item) + " -> 1 Zümrüt");
-        gWorld.dirty = true;
-        return true;
-    }
-    // buying with emeralds
-    if (!held.Empty() && held.id == ID_EMERALD && pr.numSells > 0) {
-        const Offer& o = pr.sells[((l.offer % pr.numSells) + pr.numSells) % pr.numSells];
-        if (gGame.gameMode != MODE_CREATIVE && gInv.CountOf(ID_EMERALD) < o.price) {
-            PlaySfx(SND_VILLAGER_NO, &head);
-            ShowMessage(std::string(pr.name) + ": " + std::to_string(o.price) + " Zümrüt gerekli");
-            return true;
-        }
-        if (gGame.gameMode != MODE_CREATIVE)
-            gInv.Remove(ID_EMERALD, o.price);
-        GiveOrDrop(o.item, o.count);
-        PlaySfx(SND_VILLAGER_TRADE, &head);
-        HappyParticles(head);
-        ShowMessage(std::string("Aldın: ") + std::to_string(o.count) + " " + ItemName(o.item));
-        gWorld.dirty = true;
-        return true;
-    }
-    // anything else: show the next offer
-    l.offer = (l.offer + 1) % 60;
-    PlaySfx(SND_VILLAGER_YES, &head);
-    ShowMessage(OfferText(pr, l.offer), 4.0f);
+    VillagerTrade(it->second.variant, it->second.offer, p->GetPosition() + CVector(0, 0, 0.7f));
     return true;
 }
 

@@ -10,11 +10,11 @@
 #include "CWeapon.h"
 #include "CWorld.h"
 
+#include "BlockRules.h"
 #include "Collision.h"
 #include "Draw3D.h"
 #include "Game.h"
 #include "GtaWorld.h"
-#include "Items.h"
 #include "Movement.h"
 #include "Render3D.h"
 #include "Sound.h"

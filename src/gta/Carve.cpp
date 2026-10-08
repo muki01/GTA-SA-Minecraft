@@ -610,7 +610,7 @@ bool NeighbourRange(const Int3& c, int axis, int k, float* lo, float* hi) {
 }
 } // namespace
 
-bool CarvedCell(int x, int y, int z) { return !gCarved.empty() && gCarved.count({ x, y, z }) != 0; }
+static bool CarvedCell(int x, int y, int z) { return !gCarved.empty() && gCarved.count({ x, y, z }) != 0; }
 
 bool CarvedAt(const CVector& p) {
     if (gCarved.empty())

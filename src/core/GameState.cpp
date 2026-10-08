@@ -106,4 +106,29 @@ void CloseScreen() {
     gWorld.dirty = true;
 }
 
+void PlayerDied(const Vec3& at) {
+    if (gGame.screen != SCREEN_NONE)
+        CloseScreen();
+    PlaySfx(SND_PLAYER_DEATH);
+    if (!gRules.keepInventory && gGame.gameMode == MODE_SURVIVAL) {
+        for (auto& s : gInv.slots) {
+            SpawnDrop(at, s, Vec3(0, 0, 0), 2.0f);
+            s.Clear();
+        }
+        for (auto& s : gInv.armor) {
+            SpawnDrop(at, s, Vec3(0, 0, 0), 2.0f);
+            s.Clear();
+        }
+    }
+}
+
+void GiveStarterKit() {
+    if (!gWorld.chunks.empty() || gInv.CountOf(ID_CRAFTING_TABLE) != 0 || !gInv.slots[0].Empty())
+        return;
+    ItemStack s;
+    s.id = ID_CRAFTING_TABLE; s.count = 1; gInv.Add(s);
+    s.id = ID_OAK_PLANKS; s.count = 16; gInv.Add(s);
+    s.id = ID_APPLE; s.count = 4; gInv.Add(s);
+}
+
 } // namespace mc

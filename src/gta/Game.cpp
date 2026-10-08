@@ -69,7 +69,6 @@ bool gFovKMeasured = false;
 constexpr float kFirstPersonNear = 0.1f;
 float gSavedNearClip = 0.0f;
 bool gNearClipOverridden = false;
-float gHealthSeen = -1.0f;        // player health at the end of the last check
 
 CVector Normalized(CVector v) {
     float m = v.Magnitude();
@@ -166,32 +165,15 @@ void UpdateSurvival(float dt, CPlayerPed* ped) {
     }
     gLastPlayerPos = p;
     SurvivalEvents ev;
-    if (HungerTick(dt, ped->m_fHealth, maxH, ev)) {
-        if (ev.starved)
-            gGame.hurtTimer = 0.5f;
-        gHealthSeen = ped->m_fHealth;
-    }
+    HungerTick(dt, ped->m_fHealth, maxH, ev);
 }
 
 void HandleDeath(CPlayerPed* ped) {
     bool dead = ped->m_fHealth <= 0.0f;
     if (dead && !gWasDead) {
-        if (gGame.screen != SCREEN_NONE)
-            CloseScreen();
         StopFlying(ped);
         StopRiding(ped);
-        PlaySfx(SND_PLAYER_DEATH);
-        if (!gConfig.keepInventory && gGame.gameMode == MODE_SURVIVAL) {
-            CVector p = ped->GetPosition();
-            for (auto& s : gInv.slots) {
-                SpawnDrop(p, s, CVector(0, 0, 0), 2.0f);
-                s.Clear();
-            }
-            for (auto& s : gInv.armor) {
-                SpawnDrop(p, s, CVector(0, 0, 0), 2.0f);
-                s.Clear();
-            }
-        }
+        PlayerDied(ped->GetPosition());
     }
     if (!dead && gWasDead)
         gSurvival.Respawn();
@@ -241,72 +223,17 @@ bool UpdateEating(float dt, CPlayerPed* ped, bool rmbDown) {
 // ---------------------------------------------------------------- health: armour, totem, hurt flash
 void UpdateHealthEffects(float dt, CPlayerPed* ped) {
     const float maxH = ped->m_fMaxHealth > 1.0f ? ped->m_fMaxHealth : 100.0f;
-    float h = ped->m_fHealth;
-    gGame.hurtTimer = std::max(0.0f, gGame.hurtTimer - dt);
-    if (h <= 0.0f) {
-        if (gGame.deathTime < 0.0f && gGame.age - gGame.deathCauseTime > 3.0f)
-            gGame.deathCause = STR_DEATH_GENERIC;
-        gGame.deathTime = gGame.deathTime < 0.0f ? 0.0f : gGame.deathTime + dt;
-        gHealthSeen = h;
-        if (CHud::m_BigMessage)
-            for (int i = 0; i < 7; ++i)
-                CHud::m_BigMessage[i][0] = 0; // "WASTED": the Minecraft death screen says it
-        return;
-    }
-    gGame.deathTime = -1.0f;
-    if (gHealthSeen < 0.0f || gHealthSeen > maxH * 2.0f)
-        gHealthSeen = h;
-    const bool survival = gGame.gameMode == MODE_SURVIVAL;
-    const float direct = std::min(gGta.directDamage, std::max(0.0f, gHealthSeen - h));
+    const bool fireResistance = HasEffect(EFFECT_FIRE_RESISTANCE);
+    const float direct = gGta.directDamage;
     gGta.directDamage = 0.0f;
-    if (h < gHealthSeen - 0.5f) {
-        float loss = gHealthSeen - h - direct;
-        if (survival && loss > 0.0f) {
-            // Minecraft armour: every point blocks 4% of the damage (up to 80%) and wears the pieces
-            const float block = ArmorBlock();
-            if (block > 0.0f) {
-                h = std::min(maxH, h + loss * block);
-                ped->m_fHealth = h;
-                WearArmor(std::max(1, (int)(loss / 20.0f)));
-            }
-            // then resistance and the yellow absorption hearts
-            const float left = std::max(0.0f, gHealthSeen - direct - h);
-            const float after = AbsorbDamage(left, maxH);
-            if (after < left) {
-                h = std::min(maxH, h + (left - after));
-                ped->m_fHealth = h;
-            }
-        }
-        if (survival && loss + direct > 2.0f)
-            PlaySfx(SND_HURT, nullptr, 0.7f);
-        gGame.hurtTimer = 0.5f;
+    if (HealthTick(dt, ped->m_fHealth, maxH, direct)) {
+        // a totem saved him: GTA's own fire around him goes out
+        FireResistanceCleared(ped, fireResistance);
+        gFireManager.ExtinguishPoint(ped->GetPosition(), 2.5f);
     }
-    // totem of undying: saves the player at the last moment (held in either hand)
-    if (survival) {
-        const bool fireResistance = HasEffect(EFFECT_FIRE_RESISTANCE);
-        if (UseTotem(ped->m_fHealth, maxH)) {
-            h = ped->m_fHealth;
-            FireResistanceCleared(ped, fireResistance);
-            gFireManager.ExtinguishPoint(ped->GetPosition(), 2.5f);
-            for (int i = 0; i < 60; ++i) {
-                Particle p;
-                CVector d(Rand01() * 2 - 1, Rand01() * 2 - 1, Rand01() * 2);
-                p.pos = ped->GetPosition();
-                p.vel = d * (2.0f + Rand01() * 3.0f);
-                p.maxLife = p.life = 1.0f + Rand01();
-                p.tile = TILE_P_SPARK_0;
-                p.anim = 1;
-                p.size = 0.12f;
-                p.gravity = 1.5f;
-                p.color = rand() % 2 ? 0xFFF0E040 : 0xFF60E040;
-                p.glow = true;
-                SpawnParticle(p);
-            }
-            ShowMessage("Ölümsüzlük Totemi seni kurtardı!");
-            gWorld.dirty = true;
-        }
-    }
-    gHealthSeen = ped->m_fHealth;
+    if (ped->m_fHealth <= 0.0f && CHud::m_BigMessage)
+        for (int i = 0; i < 7; ++i)
+            CHud::m_BigMessage[i][0] = 0; // "WASTED": the Minecraft death screen says it
 }
 } // namespace
 
@@ -315,7 +242,7 @@ static std::string WorldPath(int id);
 static int gWorldId = -1; // the world being played: -1 none yet, 0 new (not in a save slot), 1..8 save slot
 
 // the core's world file (src/core/Save.h), then what GTA adds: dug ground, broken buildings
-void SaveAll() {
+static void SaveAll() {
     if (gWorldId < 1)
         return; // only a world that belongs to a GTA save slot is written
     std::string path = WorldPath(gWorldId), tmp = path + ".tmp";
@@ -395,15 +322,6 @@ static void ResetWorldState() {
     gGame.gameMode = gConfig.startGameMode == 1 ? MODE_CREATIVE : MODE_SURVIVAL;
 }
 
-static void StarterKit() {
-    if (!gWorld.chunks.empty() || gInv.CountOf(ID_CRAFTING_TABLE) != 0 || !gInv.slots[0].Empty())
-        return;
-    ItemStack s;
-    s.id = ID_CRAFTING_TABLE; s.count = 1; gInv.Add(s);
-    s.id = ID_OAK_PLANKS; s.count = 16; gInv.Add(s);
-    s.id = ID_APPLE; s.count = 4; gInv.Add(s);
-}
-
 static int gProcessTicks = 0;    // GameProcess calls so far
 static int gActivatedTick = -1;  // gProcessTicks when a world was last activated
 
@@ -441,7 +359,7 @@ static void ActivateWorld() {
         }
     }
     gWorld.dirty = false;
-    StarterKit();
+    GiveStarterKit();
 }
 
 void WorldSavedToSlot(int slot) {
@@ -471,6 +389,7 @@ void GameInit() {
     gRules.explosionsBreakBlocks = gConfig.explosionsBreakBlocks;
     gRules.animals = gConfig.animals;
     gRules.maxAnimals = gConfig.maxAnimals;
+    gRules.keepInventory = gConfig.keepInventory;
     LoadGtaModelNames();
     InstallCombatHooks();
     InstallMovementHooks();
@@ -498,7 +417,7 @@ void GameOnNewSession() {
     gGame.ridingMob = 0;
     gGame.crossbowSlot = -1;
     gGta.hidPlayer = false;
-    gHealthSeen = -1.0f;
+    gSurvival.healthSeen = -1.0f;
     gHudFlagsTouched = false;
     gProofsSet = false; // a fresh player ped has default flags
     SetLoopSfx(SND_ELYTRA_FLYING, false);
@@ -542,7 +461,10 @@ void GameProcess() {
     UpdateBrokenVehicles();
     XpTick(dt, collects && gGta.enabled ? &collector : nullptr);
     MobsUpdate(dt, ped);
-    FishingUpdate(dt, ped);
+    if (gGta.enabled && ped && ped->m_fHealth > 0.0f)
+        FishingTick(dt);
+    else
+        FishingClear();
     UpdateLaunchedPeds(dt);
     PedSkinsUpdate(dt, ped);
 

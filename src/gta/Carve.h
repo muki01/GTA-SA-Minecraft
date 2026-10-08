@@ -13,7 +13,6 @@ class CEntity;
 
 namespace mc {
 
-bool CarvedCell(int x, int y, int z);
 // a point of GTA geometry that lies in a carved cell: not drawn, does not collide
 bool CarvedAt(const CVector& p);
 // the camera is in space that was dug out of a building

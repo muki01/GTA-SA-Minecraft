@@ -18,6 +18,7 @@
 #include "Entities.h"
 #include "GameState.h"
 #include "GtaCombat.h"
+#include "GtaFishing.h"
 #include "GtaMining.h"
 #include "GtaMobs.h"
 #include "Host.h"
@@ -128,6 +129,15 @@ struct GtaHost : Host {
     void HurtBeing(int being, float halfHearts, int how, const ShotOwner* by) override { GtaHurtBeing(being, halfHearts, how, by); }
     void PushBeing(int being, const Vec3& velocity) override { GtaPushBeing(being, velocity); }
     void HurtVehicle(int vehicle, float halfHearts) override { GtaHurtVehicle(vehicle, halfHearts); }
+    HostHit HookTrace(const Vec3& from, const Vec3& dir, float len) override { return GtaHookTrace(from, dir, len); }
+    bool HookPoint(const HostHit& hooked, Vec3* at) override {
+        CVector p;
+        if (!GtaHookPoint(hooked, p))
+            return false;
+        *at = p;
+        return true;
+    }
+    bool Fling(const HostHit& what, const Vec3& velocity) override { return GtaFling(what, velocity); }
     void Gust(const Vec3& centre, float radius, float side, float up, bool playerToo) override {
         GtaGust(centre, radius, side, up, playerToo);
     }

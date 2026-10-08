@@ -12,8 +12,10 @@
 #include "Interact.h"
 #include "Inventory.h"
 #include "Combat.h"
+#include "Fishing.h"
 #include "Items.h"
 #include "Mobs.h"
+#include "Villagers.h"
 #include "Particles.h"
 #include "Physics.h"
 #include "Save.h"
@@ -595,6 +597,34 @@ struct TestHost : Host {
     void PushBeing(int being, const Vec3& v) override {
         if (being != kPlayerNumber)
             people[being].push += v;
+    }
+    // the fishing hook: their vehicle tells where on it the hook sits
+    int flung = 0;
+    Vec3 flingVel;
+    HostHit HookTrace(const Vec3& from, const Vec3& dir, float len) override {
+        HostHit h = Trace(from, dir, len, false);
+        if (h.vehicle >= 0)
+            h.local = Vec3(0.0f, 0.0f, h.point.z - 10.0f);
+        return h;
+    }
+    bool HookPoint(const HostHit& on, Vec3* at) override {
+        if (on.being >= 0 && on.being < (int)people.size()) {
+            *at = people[on.being].centre + Vec3(0, 0, 0.3f);
+            return true;
+        }
+        if (on.vehicle == kCarNumber && carX < 1e8f) {
+            *at = Vec3(carX, 0.5f, 10.0f) + on.local;
+            return true;
+        }
+        return false;
+    }
+    bool Fling(const HostHit& what, const Vec3& v) override {
+        Vec3 at;
+        if (!HookPoint(what, &at))
+            return false;
+        ++flung;
+        flingVel = v;
+        return true;
     }
     void HurtVehicle(int number, float halfHearts) override {
         if (number == kCarNumber)
@@ -2654,7 +2684,8 @@ static void TestCombat() {
         gInv.Held() = Stack(wand);
         CHECK(UseHeldItem() && host.itemUses == 1 && MeleeAttack() && host.itemAttacks == 1, "the magic stick is the host's own business");
         gInv.Held() = Stack(rod);
-        CHECK(!UseHeldItem() && host.itemUses == 2, "the fishing rod too");
+        CHECK(UseHeldItem() && host.itemUses == 1 && FishingIsCast(), "the fishing rod is no business of the host's: it casts");
+        FishingClear();
     }
 
     // blows
@@ -2753,6 +2784,327 @@ static void TestCombat() {
     MobsClear();
     gGame = GameState();
     gRules = GameRules();
+}
+
+static void RunFishing(float seconds) {
+    const float dt = 0.05f;
+    for (float t = 0.0f; t < seconds; t += dt)
+        FishingTick(dt);
+}
+
+// casts the held rod and lets the bobber fly until it lands somewhere (or a second has gone)
+static void Cast() {
+    UseHeldItem();
+    for (int i = 0; i < 20 && gBobber.state == BOB_FLYING; ++i)
+        FishingTick(0.05f);
+}
+
+static void TestFishing() {
+    TestHost host;
+    SetHost(&host);
+    srand(1357);
+
+    // a catch
+    {
+        CombatStage(host);
+        host.sea = 10.5f;
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        CHECK(UseHeldItem() && FishingIsCast() && gBobber.state == BOB_FLYING && Heard(SND_BOBBER_THROW) == 1 && gGame.swing >= 0.0f,
+              "the rod casts the bobber");
+        CHECK(Near(gBobber.vel.x, 21.0f) && Near(gBobber.vel.z, 3.0f) && Near(gBobber.pos.x, 1.2f), "at 21 m/s, a little upwards");
+        RunFishing(1.0f);
+        CHECK(gBobber.state == BOB_FLOATING && gBobber.pos.x > 6.0f && gBobber.pos.x < 11.0f && Heard(SND_BOBBER_SPLASH) == 1,
+              "it lands in the host's water (x %.1f)", gBobber.pos.x);
+        float waited = 0.0f;
+        while (gBobber.nibble <= 0.0f && waited < 40.0f) {
+            FishingTick(0.05f);
+            waited += 0.05f;
+        }
+        CHECK(gBobber.nibble > 0.0f && waited > 4.0f && Heard(SND_BOBBER_SPLASH) == 2, "a fish bites after a while (%.1f s)", waited);
+        const float tired = gSurvival.exhaustion;
+        gPlayed.clear();
+        CHECK(UseHeldItem() && !FishingIsCast() && Heard(SND_BOBBER_RETRIEVE) == 1, "reeling in");
+        int caught = 0;
+        for (const DropEntity& d : gDrops)
+            caught += d.stack.count;
+        CHECK(caught == 1 && gDrops[0].vel.x < 0.0f && XpOnTheGround() >= 1 && XpOnTheGround() <= 6, "brings the catch and some experience");
+        CHECK(gInv.Held().damage == 1 && Near(gSurvival.exhaustion - tired, 0.05f), "the rod wears by one");
+
+        gDrops.clear();
+        Cast();
+        RunFishing(0.5f);
+        CHECK(gBobber.state == BOB_FLOATING && gBobber.nibble <= 0.0f, "cast again");
+        UseHeldItem();
+        CHECK(gDrops.empty() && gInv.Held().damage == 1, "too early: nothing, and the rod does not wear");
+
+        // what lies by the hook comes along
+        Cast();
+        SpawnDrop(gBobber.pos, Stack(ID_STICK), Vec3(), 0.5f);
+        UseHeldItem();
+        CHECK(gDrops.size() == 1 && gDrops[0].vel.x < -5.0f && gDrops[0].pickupDelay == 0.0f, "things lying by the hook are pulled in");
+    }
+
+    // the line breaks
+    {
+        CombatStage(host);
+        host.sea = 10.5f;
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        Cast();
+        gInv.selected = 1;
+        RunFishing(0.05f);
+        CHECK(!FishingIsCast(), "when the rod is put away");
+        gInv.selected = 0;
+        Cast();
+        host.vehicle = 5;
+        RunFishing(0.05f);
+        CHECK(!FishingIsCast(), "when the player gets into a vehicle");
+        host.vehicle = -1;
+        Cast();
+        host.player = Vec3(60.5f, 0.5f, 11.0f);
+        RunFishing(0.05f);
+        CHECK(!FishingIsCast(), "when he is more than 40 m away");
+        host.player = Vec3(0.5f, 0.5f, 11.0f);
+        host.vehicle = 5;
+        CHECK(!UseHeldItem() && !FishingIsCast(), "nobody fishes from a vehicle");
+    }
+
+    // what the hook can catch besides fish
+    {
+        CombatStage(host);
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        Cast();
+        RunFishing(1.0f);
+        CHECK(gBobber.state == BOB_STUCK && gBobber.pos.z > 9.9f && gBobber.pos.z < 10.1f, "on the floor it just lies");
+        UseHeldItem();
+        CHECK(gInv.Held().damage == 2, "pulling it out of the ground wears the rod by two");
+
+        CombatStage(host);
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        const int cow = SpawnMob(MOB_COW, Vec3(4.5f, 0.5f, 10.0f), true);
+        Cast();
+        CHECK(gBobber.state == BOB_HOOKED_MOB && gBobber.mobId == MobIdAt(cow), "an animal is hooked");
+        gMobs[cow].pos.y = 2.5f;
+        RunFishing(0.05f);
+        CHECK(Near(gBobber.pos.y, 2.5f) && Near(gBobber.pos.z, 10.9f), "the bobber goes along with it");
+        UseHeldItem();
+        CHECK(gMobs[cow].vel.x < -3.0f && gMobs[cow].vel.z > 5.0f && gInv.Held().damage == 3, "and reeling in pulls it over (the rod wears by three)");
+
+        CombatStage(host);
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        host.people.push_back({ Vec3(5.5f, 0.5f, 10.9f) });
+        Cast();
+        CHECK(gBobber.state == BOB_HOOKED_BEING && gBobber.hooked.being == 0, "somebody of the host's is hooked");
+        RunFishing(0.05f);
+        CHECK(Near(gBobber.pos.z, 11.2f), "the host says where the hook is");
+        UseHeldItem();
+        CHECK(host.flung == 1 && Near(host.flingVel.x, -7.5f, 0.05f) && Near(host.flingVel.z, 8.0f, 0.05f) && gInv.Held().damage == 3,
+              "he is flung towards the player");
+
+        CombatStage(host);
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        host.carX = 6.0f;
+        Cast();
+        CHECK(gBobber.state == BOB_HOOKED_VEHICLE && gBobber.hooked.vehicle == TestHost::kCarNumber && Near(gBobber.pos.x, 6.0f), "a vehicle is hooked");
+        host.carX = 7.0f;
+        RunFishing(0.05f);
+        CHECK(Near(gBobber.pos.x, 7.0f), "the hook moves with it");
+        UseHeldItem();
+        CHECK(host.flung == 1 && Near(host.flingVel.x, -5.85f, 0.05f) && gInv.Held().damage == 5, "a vehicle is pulled more gently and wears the rod by five");
+        Cast();
+        host.carX = 1e9f;
+        RunFishing(0.05f);
+        CHECK(gBobber.state == BOB_STUCK, "when it is gone the hook just lies there");
+    }
+    FishingClear();
+}
+
+static void TestVillagers() {
+    TestHost host;
+    SetHost(&host);
+    srand(97531);
+    const Vec3 player(0.5f, 0.5f, 11.0f);
+
+    // how they act
+    {
+        CombatStage(host);
+        NpcLook l = NpcStart(NPC_VILLAGER, 1, 100.0f, false);
+        CHECK(l.kind == NPC_VILLAGER && l.variant == 1 && l.death < 0.0f && l.say >= 4.0f && l.say <= 44.0f && l.offer >= 0 && l.offer < 5,
+              "a new villager");
+        NpcFacts f;
+        f.pos = Vec3(3.5f, 0.5f, 10.0f);
+        f.forward = Vec3(0, 1, 0);
+        f.speed = 4.0f;
+        f.health = 100.0f;
+        l.say = 100.0f;
+        for (int i = 0; i < 20; ++i)
+            NpcTick(l, 0.05f, f, player);
+        CHECK(l.limbAmount > 0.5f && l.limbSwing > 5.0f, "walking swings his legs");
+        CHECK(l.headYaw < -0.9f, "his head turns to the player next to him (%.2f)", l.headYaw);
+        f.pos = Vec3(9.5f, 0.5f, 10.0f);
+        for (int i = 0; i < 40; ++i)
+            NpcTick(l, 0.05f, f, player);
+        CHECK(std::fabs(l.headYaw) < 0.05f, "and back when he is further away");
+        f.health = 90.0f;
+        NpcTick(l, 0.05f, f, player);
+        CHECK(Heard(SND_VILLAGER_HURT) == 1 && l.hurt == 0.45f, "a villager who is hurt cries out and flashes red");
+        f.health = 80.0f;
+        NpcTick(l, 0.05f, f, player);
+        CHECK(Heard(SND_VILLAGER_HURT) == 1, "once per flash");
+        l.say = 0.01f;
+        NpcTick(l, 0.05f, f, player);
+        CHECK(Heard(SND_VILLAGER_SAY) == 1 && l.say >= 15.0f, "now and then he says something");
+        f.dead = true;
+        NpcTick(l, 0.05f, f, player);
+        NpcTick(l, 0.05f, f, player);
+        CHECK(Heard(SND_VILLAGER_DEATH) == 1 && Near(l.death, 0.1f), "he dies once");
+        NpcLook p = NpcStart(NPC_PILLAGER, 0, 100.0f, false);
+        f.dead = false;
+        f.health = 100.0f;
+        NpcTick(p, 0.05f, f, player);
+        f.health = 50.0f;
+        NpcTick(p, 0.05f, f, player);
+        CHECK(Heard(SND_PILLAGER_HURT) == 1, "pillagers sound like pillagers");
+        CHECK(NpcStart(NPC_VILLAGER, 0, 0.0f, true).death == 10.0f, "somebody found dead is long dead");
+    }
+
+    // trading
+    {
+        CombatStage(host);
+        const Vec3 head(3.5f, 0.5f, 11.7f);
+        int offer = 0;
+        VillagerTrade(0, offer, head);
+        CHECK(Heard(SND_VILLAGER_NO) == 1 && gGame.messageTimer > 0.0f && gGame.swing >= 0.0f, "a villager without a profession has nothing");
+        gInv.Held() = Stack(ID_WHEAT, 30);
+        VillagerTrade(1, offer, head);
+        CHECK(gInv.CountOf(ID_WHEAT) == 10 && gInv.CountOf(ID_EMERALD) == 1 && Heard(SND_VILLAGER_TRADE) == 1 &&
+                  CountParticles(TILE_P_ENCHANTED_HIT) == 8,
+              "a farmer buys 20 wheat for an emerald");
+        VillagerTrade(1, offer, head);
+        CHECK(gInv.CountOf(ID_WHEAT) == 10 && gInv.CountOf(ID_EMERALD) == 1 && Heard(SND_VILLAGER_NO) == 2, "ten are not enough");
+        gInv = PlayerInventory();
+        gInv.Held() = Stack(ID_EMERALD, 1);
+        VillagerTrade(7, offer, head);
+        CHECK(gInv.CountOf(ID_BREAD) == 6 && gInv.CountOf(ID_EMERALD) == 0, "he sells six bread for one (profession 7 is a farmer again)");
+        gInv.Held() = Stack(ID_EMERALD, 1);
+        offer = 3;
+        VillagerTrade(1, offer, head);
+        CHECK(gInv.CountOf(ID_GOLDEN_CARROT) == 0 && gInv.CountOf(ID_EMERALD) == 1 && Heard(SND_VILLAGER_NO) == 3, "golden carrots cost three");
+        gGame.gameMode = MODE_CREATIVE;
+        VillagerTrade(1, offer, head);
+        CHECK(gInv.CountOf(ID_GOLDEN_CARROT) == 3 && gInv.CountOf(ID_EMERALD) == 1, "in creative one is enough, and it stays");
+        gInv.Held() = Stack(ID_DIRT, 1);
+        VillagerTrade(1, offer, head);
+        CHECK(offer == 4 && Heard(SND_VILLAGER_YES) == 1 && gGame.message.find("Zümrüt") != std::string::npos, "anything else: the next offer");
+        offer = 59;
+        VillagerTrade(1, offer, head);
+        CHECK(offer == 0, "the offers go round");
+    }
+}
+
+static void TestPlayerHealth() {
+    TestHost host;
+    SetHost(&host);
+    srand(8642);
+
+    // damage
+    {
+        CombatStage(host);
+        float health = 100.0f;
+        gSurvival.healthSeen = -1.0f;
+        CHECK(!HealthTick(0.05f, health, 100.0f, 0.0f) && gSurvival.healthSeen == 100.0f && gGame.deathTime < 0.0f,
+              "the first look only remembers the health");
+        health = 60.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        CHECK(health == 60.0f && gGame.hurtTimer == 0.5f && Heard(SND_HURT) == 1 && gSurvival.healthSeen == 60.0f, "without armour a hit takes it all");
+        gInv.armor[0] = Stack(ID_IRON_HELMET);
+        gInv.armor[1] = Stack(ID_IRON_CHESTPLATE);
+        const float block = ArmorBlock();
+        health = 20.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        CHECK(block > 0.2f && Near(health, 20.0f + 40.0f * block, 0.01f) && gInv.armor[0].damage == 2 && gInv.armor[1].damage == 2,
+              "armour gives some of it back (%.1f) and wears", health);
+        const float before = health;
+        health -= 10.0f;
+        HealthTick(0.05f, health, 100.0f, 10.0f);
+        CHECK(Near(health, before - 10.0f) && gInv.armor[0].damage == 2, "poison and drowning go through armour");
+        health -= 0.3f;
+        gGame.hurtTimer = 0.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        CHECK(gGame.hurtTimer == 0.0f, "a scratch is nothing");
+        gGame.gameMode = MODE_CREATIVE;
+        gPlayed.clear();
+        const float c = health;
+        health -= 20.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        CHECK(Near(health, c - 20.0f) && Heard(SND_HURT) == 0 && gGame.hurtTimer == 0.5f, "in creative the host decides alone");
+
+        // the totem
+        gGame.gameMode = MODE_SURVIVAL;
+        gInv.armor[0] = gInv.armor[1] = ItemStack();
+        gInv.Held() = Stack(ID_TOTEM_OF_UNDYING);
+        health = 10.0f;
+        CHECK(HealthTick(0.05f, health, 100.0f, 0.0f) && health == 50.0f && gInv.Held().Empty() && Heard(SND_TOTEM) == 1, "a totem saves him");
+        CHECK(CountParticles(TILE_P_SPARK_0) == 60 && gGame.messageTimer > 0.0f && HasEffect(EFFECT_REGENERATION) && gSurvival.healthSeen == 50.0f,
+              "with sparks, a message and regeneration");
+        health = 10.0f;
+        CHECK(!HealthTick(0.05f, health, 100.0f, 0.0f) && Near(health, 50.0f) && !HasEffect(EFFECT_ABSORPTION), "only once; its yellow hearts soak up the next hit and are gone");
+
+        // dead
+        health = 0.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        CHECK(Near(gGame.deathTime, 0.05f) && gGame.deathCause == STR_DEATH_GENERIC, "while he is dead the death screen's clock runs");
+        health = 100.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        CHECK(gGame.deathTime < 0.0f && health == 100.0f, "back alive");
+
+        // starving
+        gSurvival.food = 0.0f;
+        gSurvival.foodTimer = 3.99f;
+        gGame.hurtTimer = 0.0f;
+        SurvivalEvents ev;
+        HungerTick(0.05f, health, 100.0f, ev);
+        CHECK(health == 95.0f && gGame.hurtTimer == 0.5f && gSurvival.healthSeen == 95.0f, "starving flashes red; it is no hit for the armour");
+    }
+
+    // death
+    {
+        CombatStage(host);
+        const Vec3 at(3.5f, 0.5f, 10.5f);
+        gInv.slots[0] = Stack(ID_DIRT, 5);
+        gInv.armor[0] = Stack(ID_IRON_HELMET);
+        gGame.screen = SCREEN_INVENTORY;
+        PlayerDied(at);
+        CHECK(gGame.screen == SCREEN_NONE && Heard(SND_PLAYER_DEATH) == 1 && gDrops.empty() && gInv.CountOf(ID_DIRT) == 5,
+              "the rules keep his things");
+        gRules.keepInventory = false;
+        PlayerDied(at);
+        CHECK(CountDrops(ID_DIRT) == 5 && CountDrops(ID_IRON_HELMET) == 1 && gInv.CountOf(ID_DIRT) == 0 && gInv.armor[0].Empty() &&
+                  gDrops[0].pickupDelay == 2.0f,
+              "otherwise they fall out");
+        gDrops.clear();
+        gInv.slots[0] = Stack(ID_DIRT, 5);
+        gGame.gameMode = MODE_CREATIVE;
+        PlayerDied(at);
+        CHECK(gDrops.empty() && gInv.CountOf(ID_DIRT) == 5, "not in creative");
+    }
+
+    // a fresh world
+    {
+        gWorld.Clear();
+        gInv = PlayerInventory();
+        GiveStarterKit();
+        CHECK(gInv.CountOf(ID_CRAFTING_TABLE) == 1 && gInv.CountOf(ID_OAK_PLANKS) == 16 && gInv.CountOf(ID_APPLE) == 4, "a new world starts with a kit");
+        GiveStarterKit();
+        CHECK(gInv.CountOf(ID_CRAFTING_TABLE) == 1, "once");
+        BlockStage();
+        gInv = PlayerInventory();
+        GiveStarterKit();
+        CHECK(gInv.CountOf(ID_CRAFTING_TABLE) == 0, "a world with blocks in it gets none");
+    }
+    gGame = GameState();
+    gRules = GameRules();
+    ResetSurvival();
 }
 
 static void TestSave() {
@@ -3030,6 +3382,9 @@ int main(int argc, char** argv) {
     TestInteract();
     TestMobs();
     TestCombat();
+    TestFishing();
+    TestVillagers();
+    TestPlayerHealth();
     TestSave();
     TestControls();
     TestGameState();

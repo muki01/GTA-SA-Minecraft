@@ -14,7 +14,7 @@
 #include "GtaCombat.h"
 #include "Config.h"
 #include "Draw3D.h"
-#include "Fishing.h"
+#include "GtaFishing.h"
 #include "GameState.h"
 #include "Items.h"
 #include "McModel.h"

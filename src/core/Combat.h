@@ -53,8 +53,6 @@ void Gust(const Vec3& centre, float radius, float side, float up, bool playerToo
 void StrikeLightning(const Vec3& at);
 void LightningTick(float dt);
 bool LightningFlashActive();
-// what a dead villager or pillager leaves behind: experience and a few items
-void DropVillagerLoot(const Vec3& at, bool illager);
 void CombatClear();
 
 } // namespace mc

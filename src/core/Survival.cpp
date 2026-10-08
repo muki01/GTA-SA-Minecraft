@@ -3,8 +3,11 @@
 #include <cstdlib>
 
 #include "Audio.h"
+#include "GameState.h"
+#include "Host.h"
 #include "Inventory.h"
 #include "Items.h"
+#include "Particles.h"
 #include "World.h"
 
 namespace mc {
@@ -151,7 +154,9 @@ bool HungerTick(float dt, float& health, float maxHealth, SurvivalEvents& ev) {
         health = std::max(maxHealth * 0.1f, health - maxHealth / 20.0f);
         ev.starved = true;
         PlaySfx(SND_HURT, nullptr, 0.6f);
+        gGame.hurtTimer = 0.5f;
     }
+    s.healthSeen = health; // (what the rules themselves did is no damage)
     return true;
 }
 
@@ -350,6 +355,74 @@ int XpOrbSize(int amount) {
         if (amount >= s)
             return s;
     return 1;
+}
+
+// ---------------------------------------------------------------- the host's health
+bool HealthTick(float dt, float& health, float maxHealth, float direct) {
+    Survival& s = gSurvival;
+    float h = health;
+    gGame.hurtTimer = std::max(0.0f, gGame.hurtTimer - dt);
+    if (h <= 0.0f) {
+        if (gGame.deathTime < 0.0f && gGame.age - gGame.deathCauseTime > 3.0f)
+            gGame.deathCause = STR_DEATH_GENERIC;
+        gGame.deathTime = gGame.deathTime < 0.0f ? 0.0f : gGame.deathTime + dt;
+        s.healthSeen = h;
+        return false;
+    }
+    gGame.deathTime = -1.0f;
+    if (s.healthSeen < 0.0f || s.healthSeen > maxHealth * 2.0f)
+        s.healthSeen = h;
+    const bool survival = gGame.gameMode == MODE_SURVIVAL;
+    direct = std::min(direct, std::max(0.0f, s.healthSeen - h));
+    if (h < s.healthSeen - 0.5f) {
+        float loss = s.healthSeen - h - direct;
+        if (survival && loss > 0.0f) {
+            // Minecraft armour: every point blocks 4% of the damage (up to 80%) and wears the pieces
+            const float block = ArmorBlock();
+            if (block > 0.0f) {
+                h = std::min(maxHealth, h + loss * block);
+                health = h;
+                WearArmor(std::max(1, (int)(loss / 20.0f)));
+            }
+            // then resistance and the yellow absorption hearts
+            const float left = std::max(0.0f, s.healthSeen - direct - h);
+            const float after = AbsorbDamage(left, maxHealth);
+            if (after < left) {
+                h = std::min(maxHealth, h + (left - after));
+                health = h;
+            }
+        }
+        if (survival && loss + direct > 2.0f)
+            PlaySfx(SND_HURT, nullptr, 0.7f);
+        gGame.hurtTimer = 0.5f;
+    }
+    // totem of undying: saves the player at the last moment (held in either hand)
+    bool totem = false;
+    if (survival) {
+        if (UseTotem(health, maxHealth)) {
+            totem = true;
+            Vec3 at;
+            TheHost().PlayerPos(&at);
+            for (int i = 0; i < 60; ++i) {
+                Particle p;
+                Vec3 d(Rand01() * 2 - 1, Rand01() * 2 - 1, Rand01() * 2);
+                p.pos = at;
+                p.vel = d * (2.0f + Rand01() * 3.0f);
+                p.maxLife = p.life = 1.0f + Rand01();
+                p.tile = TILE_P_SPARK_0;
+                p.anim = 1;
+                p.size = 0.12f;
+                p.gravity = 1.5f;
+                p.color = rand() % 2 ? 0xFFF0E040 : 0xFF60E040;
+                p.glow = true;
+                SpawnParticle(p);
+            }
+            ShowMessage("Ölümsüzlük Totemi seni kurtardı!");
+            gWorld.dirty = true;
+        }
+    }
+    s.healthSeen = health;
+    return totem;
 }
 
 } // namespace mc
