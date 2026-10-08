@@ -10,6 +10,7 @@
 #include "common.h"
 #include "ePedBones.h"
 
+#include "Beds.h"
 #include "Draw3D.h"
 #include "Game.h"
 #include "Inventory.h"
@@ -114,6 +115,14 @@ static void RenderPlayer(float light, bool vehiclePass) {
             feet = pos - CVector(0, 0, ped->bIsDucking ? 1.0f + 0.125f * kPlayerScale : 1.0f);
             if (gGame.ridingMob)
                 fwd = Horizontal(ped->GetForward());
+        }
+        Vec3 sleepFeet, sleepHead;
+        if (SleepPose(&sleepFeet, &sleepHead)) {
+            // in bed: on his back, the head on the pillow
+            up = ToGta(sleepHead);
+            fwd = CVector(0, 0, 1);
+            right = CVector::Cross(fwd, up);
+            feet = ToGta(sleepFeet);
         }
         if (dead) {
             Vec3 r2 = right, u2 = up;

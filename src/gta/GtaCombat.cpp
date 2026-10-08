@@ -20,13 +20,11 @@
 #include "Config.h"
 #include "Draw3D.h"
 #include "Game.h"
-#include "Items.h"
-#include "McModel.h"
 #include "Mobs.h"
 #include "Movement.h"
 #include "Particles.h"
 #include "PedSkins.h"
-#include "Render3D.h"
+#include "Renderers.h"
 #include "Sound.h"
 #include "Terrain.h"
 #include "Textures.h"
@@ -427,51 +425,8 @@ void RenderProjectiles(float light) {
         return;
     const CMatrix& cm = TheCamera.m_mCameraMatrix;
     const CVector camR = cm.right * -1.0f, camU = cm.at;
-    for (auto& pr : gProjectiles) {
-        if (pr.type == PJ_ARROW) {
-            d3::SetRaster(gEntityTex.Raster());
-            CVector dir = Norm(pr.vel);
-            CVector side = Norm(CVector(-dir.y, dir.x, 0.0f));
-            if (std::fabs(dir.z) > 0.99f)
-                side = CVector(1, 0, 0);
-            CVector up = Norm(CVector::Cross(side, dir));
-            // ArrowRenderer: two crossed 16x5 strips, the feathers at u = 0 and the tip at u = 16
-            CVector tail = pr.pos - dir * 0.675f, head = pr.pos + dir * 0.225f;
-            const float w = 0.14f;
-            const float u0 = (float)ENT_ARROW.x / ENT_TEX_W, u1 = (ENT_ARROW.x + 16.0f) / ENT_TEX_W;
-            const float v0 = (float)ENT_ARROW.y / ENT_TEX_H, v1 = (ENT_ARROW.y + 5.0f) / ENT_TEX_H;
-            RwUInt32 c = d3::Gray(light);
-            d3::Quad(tail + side * w, head + side * w, head - side * w, tail - side * w, u0, v0, u1, v1, c);
-            d3::Quad(tail + up * w, head + up * w, head - up * w, tail - up * w, u0, v0, u1, v1, c);
-        } else if (pr.type == PJ_TRIDENT) {
-            // the item sprite with its diagonal along the flight direction (handle behind)
-            CVector dir = pr.returning ? Norm(pr.vel * -1.0f) : Norm(pr.vel);
-            if (pr.stuck && !pr.returning)
-                dir = Norm(pr.vel * -10.0f);
-            CVector side = Norm(CVector::Cross(dir, CVector(0, 0, 1)));
-            if (side.Magnitude() < 0.5f)
-                side = CVector(1, 0, 0);
-            // ThrownTridentRenderer: the 3D trident, spikes first
-            Pose p;
-            p.Y = dir * -1.0f;
-            p.X = side;
-            p.Z = CVector::Cross(p.X, p.Y);
-            p.o = pr.pos;
-            DrawTridentModel(p, light);
-        } else {
-            d3::SetRaster(gAtlasTex.Raster());
-            uint16_t id = pr.type == PJ_SNOWBALL  ? ID_SNOWBALL
-                        : pr.type == PJ_EGG       ? ID_EGG
-                        : pr.type == PJ_PEARL     ? ID_ENDER_PEARL
-                        : pr.type == PJ_FIREBALL  ? ID_FIRE_CHARGE
-                        : pr.type == PJ_WIND      ? ID_WIND_CHARGE
-                        : pr.type == PJ_XPBOTTLE  ? ID_EXPERIENCE_BOTTLE
-                                                  : ID_FIREWORK_ROCKET;
-            float size = pr.type == PJ_FIREBALL ? 0.4f : 0.15f;
-            EmitItemSprite(pr.pos, camR, camU, size, Item(id).tile,
-                           pr.type == PJ_FIREWORK || pr.type == PJ_FIREBALL || pr.type == PJ_ROCKET ? 1.0f : light);
-        }
-    }
+    for (auto& pr : gProjectiles)
+        DrawProjectile(pr, camR, camU, light);
     d3::Flush();
 }
 
@@ -484,42 +439,8 @@ void RenderLightning() {
     RwRenderStateSet(rwRENDERSTATESRCBLEND, (void*)rwBLENDSRCALPHA);
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDONE);
     RwRenderStateSet(rwRENDERSTATEFOGENABLE, (void*)FALSE);
-    const float u = (ENT_WHITE.x + 4.0f) / ENT_TEX_W, v = (ENT_WHITE.y + 4.0f) / ENT_TEX_H;
-    for (auto& b : gBolts) {
-        const CVector at = b.at;
-        // LightningBoltRenderer: a jagged column that flickers
-        if (((int)(b.age * 30.0f)) % 3 == 2)
-            continue;
-        uint32_t seed = b.seed;
-        auto rnd = [&]() {
-            seed = seed * 1664525u + 1013904223u;
-            return ((seed >> 8) & 0xFFFF) / 65535.0f - 0.5f;
-        };
-        int alpha = (int)(Clamp(1.0f - b.age / 0.5f, 0.0f, 1.0f) * 200.0f);
-        for (int branch = 0; branch < 3; ++branch) {
-            CVector p = at + CVector(0, 0, branch == 0 ? 0.0f : 20.0f + branch * 15.0f);
-            CVector top = at + CVector(rnd() * 20.0f, rnd() * 20.0f, 110.0f);
-            const int segs = branch == 0 ? 16 : 6;
-            CVector prev = branch == 0 ? at : p + CVector(rnd() * 6.0f, rnd() * 6.0f, 0.0f);
-            for (int k = 1; k <= segs; ++k) {
-                float t = (float)k / segs;
-                CVector next = (branch == 0 ? at : prev) * (1.0f - t) + top * t;
-                if (branch == 0)
-                    next = at * (1.0f - t) + top * t;
-                next += CVector(rnd() * 3.0f, rnd() * 3.0f, 0.0f);
-                CVector mid = (next + prev) * 0.5f;
-                CVector side = CVector::Cross(next - prev, cam - mid);
-                float sm = side.Magnitude();
-                if (sm > 1e-4f) {
-                    side = side * ((branch == 0 ? 0.35f : 0.18f) / sm);
-                    d3::Quad(prev - side, prev + side, next + side, next - side, u, v, u, v, d3::Argb(200, 210, 255, alpha));
-                    d3::Quad(prev - side * 2.5f, prev + side * 2.5f, next + side * 2.5f, next - side * 2.5f, u, v, u, v,
-                             d3::Argb(120, 140, 255, alpha / 3));
-                }
-                prev = next;
-            }
-        }
-    }
+    for (auto& b : gBolts)
+        DrawBolt(b, cam);
     d3::Flush();
     RwRenderStateSet(rwRENDERSTATEDESTBLEND, (void*)rwBLENDINVSRCALPHA);
 }

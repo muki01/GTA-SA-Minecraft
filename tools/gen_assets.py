@@ -8,9 +8,9 @@ Outputs
   assets/font.png     Minecraft bitmap font (ASCII + Latin accents incl. Turkish)
   assets/entity.png   steve skin, elytra, arrow, shadow
   assets/sounds/*.ogg selected sound files
-  src/generated/Assets.h       tile / gui rect / font tables
-  src/generated/GameData.h     ids, enums
-  src/generated/GameData.cpp   block, item, recipe and sound tables
+  src/core/generated/Assets.h       tile / gui rect / font tables
+  src/core/generated/GameData.h     ids, enums
+  src/core/generated/GameData.cpp   block, item, recipe and sound tables
 """
 import json
 import os
@@ -25,7 +25,7 @@ MCA = os.path.join(ROOT, "minecraft-assets-26.3")
 AM = os.path.join(MCA, "assets", "minecraft")
 DM = os.path.join(MCA, "data", "minecraft")
 OUT = os.path.join(ROOT, "assets")
-GEN = os.path.join(ROOT, "src", "generated")
+GEN = os.path.join(ROOT, "src", "core", "generated")
 os.makedirs(OUT, exist_ok=True)
 os.makedirs(GEN, exist_ok=True)
 os.makedirs(os.path.join(OUT, "sounds"), exist_ok=True)
@@ -170,6 +170,8 @@ TEMPLATES = {
     "block/cube_column_uv_locked_y": "column", "block/cube_column_uv_locked_z": "column", "block/cube_column_mirrored": "column",
     "block/cube_bottom_top": "bottom_top", "block/orientable": "orientable",
     "block/orientable_with_bottom": "orientable_bottom", "block/cube": "cube6",
+    "block/stairs": "stairs", "block/inner_stairs": "stairs", "block/outer_stairs": "stairs",
+    "block/slab": "slab", "block/slab_top": "slab",
 }
 EXCLUDE_PREFIX = ("infested_", "waxed_", "test_", "potted_")
 EXCLUDE_EXACT = {"barrier", "light", "structure_block", "jigsaw", "command_block", "chain_command_block",
@@ -275,8 +277,20 @@ SURF = dict(DEFAULT=0, TARMAC=1, PAVEMENT=4, GRAVEL=6, GRASS=9, HEDGE=41, MUD=25
 SOUND_GROUPS = ["stone", "wood", "gravel", "grass", "sand", "glass", "wool", "metal", "snow"]
 
 
+WOOD_TYPES = ("oak", "spruce", "birch", "jungle", "acacia", "dark_oak", "mangrove", "cherry", "pale_oak", "poplar",
+              "bamboo", "crimson", "warped")
+
+
 def classify(n):
     """surface, sound group, creative category"""
+    if n.endswith("_bed") or n.endswith("_bed_head"):
+        return SURF["DEFAULT"], "wood", 1
+    if n == "iron_bars":
+        return SURF["DEFAULT"], "metal", 0
+    if n.endswith("_stairs") or n.endswith("_slab") or n.endswith("_fence") or n.endswith("_wall"):
+        if any(n.startswith(w + "_") for w in WOOD_TYPES):
+            return SURF["WOOD"], "wood", 0
+        return SURF["ROCK"], "stone", 0
     if n in PLANTS:
         return SURF["GRASS"], "grass", 2
     if n in FLUIDS:
@@ -346,6 +360,39 @@ def build_blocks():
                                              side=add_tile("grass_block_side_composite", side)), render=0)
             continue
         bs = jload(os.path.join(bs_dir, f))
+        # beds: two blocks, the foot (the item) and the head (only ever placed with it)
+        if key.endswith("_bed"):
+            try:
+                _, ft = resolve_model("block/" + key + "_foot")
+                _, ht = resolve_model("block/" + key + "_head")
+                down, north = tex_tile("block/bed_down"), tex_tile("block/bed_head_north")
+                add_block(key, "bed", dict(east=tex_tile(deref(ft, "east")), west=tex_tile(deref(ft, "west")), north=north,
+                                           south=tex_tile(deref(ft, "south")), top=tex_tile(deref(ft, "up")), bottom=down))
+                he = tex_tile(deref(ht, "east"))
+                add_block(key + "_head", "bed_head", dict(east=he, west=tex_tile(deref(ht, "west")), north=north, south=he,
+                                                          top=tex_tile(deref(ht, "up")), bottom=down),
+                          extra=dict(name=tr_name("block", key)))
+            except (FileNotFoundError, TypeError, AttributeError):
+                pass
+            continue
+        # panes, bars, fences and walls (multipart: they join their neighbours): the textures of their post
+        joined = "pane" if key.endswith("_pane") or key == "iron_bars" else "fence" if key.endswith("_fence") else \
+            "wall" if key.endswith("_wall") else None
+        if joined:
+            _, tx = resolve_model("block/" + key + "_post")
+            try:
+                if joined == "pane":
+                    side = tex_tile(deref(tx, "pane") or deref(tx, "bars"))
+                    edge = tex_tile(deref(tx, "edge"))
+                    add_block(key, "pane", dict(top=edge, bottom=edge, side=side))
+                    blocks[key]["model"] = "item/" + key
+                else:
+                    t = tex_tile(deref(tx, "texture" if joined == "fence" else "wall"))
+                    add_block(key, joined, dict(top=t, bottom=t, side=t))
+                    blocks[key]["model"] = "block/" + key + "_inventory"
+            except (FileNotFoundError, TypeError, AttributeError):
+                pass
+            continue
         if "variants" not in bs:
             continue
         model = pick_variant(bs["variants"])
@@ -382,6 +429,9 @@ def build_blocks():
                 n_, s_, e_, w_ = (tex_tile(deref(texs, k)) for k in ("north", "south", "east", "west"))
                 add_block(key, "cube6", dict(top=tex_tile(deref(texs, "up")), bottom=tex_tile(deref(texs, "down")),
                                             north=n_, south=s_, east=e_, west=w_))
+            elif kind in ("stairs", "slab"):
+                add_block(key, kind, dict(top=tex_tile(deref(texs, "top")), bottom=tex_tile(deref(texs, "bottom")),
+                                         side=tex_tile(deref(texs, "side"))))
         except FileNotFoundError:
             continue
 
@@ -547,7 +597,8 @@ def loot_drops(key):
         for m in mods:
             if not isinstance(m, dict):
                 continue
-            if strip_ns(m.get("type", m.get("function", ""))) == "set_count":
+            # (a count that depends on the block's state - a double slab, more candles - is not the usual one)
+            if strip_ns(m.get("type", m.get("function", ""))) == "set_count" and not m.get("conditions") and not m.get("condition"):
                 c = m.get("count")
                 if isinstance(c, (int, float)):
                     lo = hi = int(c)
@@ -595,26 +646,27 @@ def loot_drops(key):
 
 def finalize_blocks():
     for key, b in blocks.items():
-        h = hardness_for(key)
+        base = key[:-5] if key.endswith("_bed_head") else key  # a bed's head is the bed
+        h = hardness_for(base)
         tool = 0
         for i, t in enumerate(("pickaxe", "axe", "shovel", "hoe")):
-            if key in MINEABLE[t]:
+            if base in MINEABLE[t]:
                 tool = i + 1
                 break
         if h is None:
             h = {1: 1.5, 2: 2.0, 3: 0.5, 4: 0.5}.get(tool, 1.0)
         tier = 0
         for t in (4, 3, 2):
-            if key in NEEDS[t]:
+            if base in NEEDS[t]:
                 tier = t
                 break
         requires = tool == 1 and key not in ("ice", "packed_ice", "blue_ice") and h >= 0.5
         if requires and tier == 0:
             tier = 1
-        surface, sound, cat = classify(key)
+        surface, sound, cat = classify(base)
         b.update(hardness=h, tool=tool, tier=tier, requires=requires, surface=surface,
                  sound=SOUND_GROUPS.index(sound), category=cat, emissive=key in EMISSIVE,
-                 drops=loot_drops(key))
+                 drops=loot_drops(base))
 
 
 # ======================================================================= items
@@ -652,8 +704,8 @@ SPECIAL = {"bow": 1, "arrow": 2, "spectral_arrow": 2, "flint_and_steel": 3, "fir
            "trident": 25, "water_bucket": 26, "lava_bucket": 27, "crossbow": 28, "bone_meal": 29,
            "elytra": 5, "snowball": 6, "egg": 7, "ender_pearl": 8, "debug_stick": 9, "cow_spawn_egg": 10,
            "pig_spawn_egg": 11, "sheep_spawn_egg": 12, "chicken_spawn_egg": 13, "fishing_rod": 14, "shears": 15,
-           "bucket": 16}
-KEEP_SPAWN_EGGS = ("cow_spawn_egg", "pig_spawn_egg", "sheep_spawn_egg", "chicken_spawn_egg")
+           "bucket": 16, "creeper_spawn_egg": 30, "warden_spawn_egg": 31}
+KEEP_SPAWN_EGGS = ("cow_spawn_egg", "pig_spawn_egg", "sheep_spawn_egg", "chicken_spawn_egg", "creeper_spawn_egg", "warden_spawn_egg")
 EXCLUDE_ITEMS = ("spawn_egg", "knowledge_book", "structure_void", "air", "barrier", "light",
                  "bundle", "filled_map", "command_block_minecart", "jigsaw", "test_")
 NAME_OVERRIDE = {"debug_stick": "B\u00fcy\u00fcl\u00fc Sopa"}
@@ -785,8 +837,193 @@ build_extra_blocks()
 finalize_blocks()
 build_items()
 
-block_keys = list(blocks.keys())
-item_keys = list(items.keys())
+# ======================================================================= the creative tabs
+# Minecraft's tabs (CreativeModeTabs): the redstone blocks and the spawn eggs have tabs of their own, and inside a tab
+# things come grouped: wood by wood type, stone by its family (stairs, slab, wall after it), colours in Minecraft's order,
+# tools and armour by material. (The game's own lists are code, not assets: this follows them as far as it can.)
+CAT_NATURAL, CAT_FOOD, CAT_INGREDIENTS, CAT_REDSTONE, CAT_SPAWN_EGGS = 2, 6, 7, 8, 9
+REDSTONE_WORDS = ("repeater", "comparator", "piston", "observer", "dispenser", "dropper", "crafter", "hopper", "lever",
+                  "daylight_detector", "target", "tripwire_hook", "trapped_chest", "note_block", "sculk_sensor",
+                  "lightning_rod", "rail", "minecart", "slime_block", "honey_block", "lectern")
+REDSTONE_EXACT = {"redstone", "redstone_torch", "redstone_block", "redstone_lamp", "tnt", "stone_button",
+                  "stone_pressure_plate", "light_weighted_pressure_plate", "heavy_weighted_pressure_plate", "iron_door",
+                  "iron_trapdoor"}
+COLORS = ["white", "light_gray", "gray", "black", "brown", "red", "orange", "yellow", "lime", "green", "cyan",
+          "light_blue", "blue", "purple", "magenta", "pink"]
+COLORED_KINDS = ["wool", "wool_stairs", "wool_slab", "carpet", "terracotta", "concrete", "concrete_stairs", "concrete_slab",
+                 "concrete_powder", "glazed_terracotta", "glass", "tinted_glass",
+                 "stained_glass", "glass_pane", "stained_glass_pane", "shulker_box", "bed", "candle", "banner", "dye",
+                 "bundle", "harness"]
+WOOD_PARTS = ["log", "stem", "block", "wood", "hyphae", "stripped_log", "stripped_stem", "stripped_block", "stripped_wood",
+              "stripped_hyphae", "planks", "mosaic", "stairs", "mosaic_stairs", "slab", "mosaic_slab", "fence", "fence_gate",
+              "door", "trapdoor", "pressure_plate", "button", "sign", "hanging_sign", "boat", "chest_boat", "raft",
+              "chest_raft", "leaves", "sapling", "propagule"]
+STONE_FAMILIES = ["stone", "cobblestone", "mossy_cobblestone", "stone_brick", "mossy_stone_brick", "granite", "diorite",
+                  "andesite", "deepslate", "cobbled_deepslate", "deepslate_brick", "deepslate_tile", "tuff", "tuff_brick",
+                  "brick", "packed_mud", "mud_brick", "resin_brick", "sandstone", "red_sandstone", "prismarine",
+                  "prismarine_brick", "dark_prismarine", "nether_brick", "red_nether_brick", "basalt", "blackstone",
+                  "blackstone_brick", "end_stone", "end_stone_brick", "purpur", "quartz", "quartz_brick", "amethyst",
+                  "copper", "cut_copper", "iron", "gold", "emerald", "lapis", "diamond", "netherite", "sulfur", "cinnabar"]
+STONE_MODS = ["smooth", "polished", "chiseled", "cracked", "cut", "exposed", "weathered", "oxidized"]
+SHAPE_SUFFIXES = ["stairs", "slab", "wall", "fence", "fence_gate", "door", "trapdoor", "pressure_plate", "button",
+                  "pillar", "bars", "chain", "grate", "bulb"]
+MATERIALS = ["wooden", "leather", "stone", "chainmail", "copper", "iron", "golden", "diamond", "netherite", "turtle"]
+TOOL_KINDS, WEAPON_KINDS, ARMOR_KINDS = ["shovel", "pickaxe", "axe", "hoe"], ["sword", "spear"], ["helmet", "chestplate", "leggings", "boots"]
+NATURAL_FIRST = ["grass_block", "podzol", "mycelium", "dirt_path", "dirt", "coarse_dirt", "rooted_dirt", "farmland", "mud",
+                 "clay", "gravel", "sand", "red_sand", "ice", "packed_ice", "blue_ice", "snow_block", "snow", "moss_block",
+                 "moss_carpet", "pale_moss_block", "pale_moss_carpet", "stone", "deepslate", "granite", "diorite", "andesite",
+                 "calcite", "tuff", "dripstone_block", "pointed_dripstone", "obsidian", "crying_obsidian", "netherrack",
+                 "crimson_nylium", "warped_nylium", "soul_sand", "soul_soil", "bone_block", "blackstone", "basalt",
+                 "smooth_basalt", "end_stone", "coal_ore", "deepslate_coal_ore", "iron_ore", "deepslate_iron_ore",
+                 "copper_ore", "deepslate_copper_ore", "gold_ore", "deepslate_gold_ore", "redstone_ore",
+                 "deepslate_redstone_ore", "emerald_ore", "deepslate_emerald_ore", "lapis_ore", "deepslate_lapis_ore",
+                 "diamond_ore", "deepslate_diamond_ore", "nether_gold_ore", "nether_quartz_ore", "ancient_debris",
+                 "raw_iron_block", "raw_copper_block", "raw_gold_block", "glowstone", "amethyst_block", "budding_amethyst",
+                 "small_amethyst_bud", "medium_amethyst_bud", "large_amethyst_bud", "amethyst_cluster"]
+FOOD_ORDER = ["apple", "golden_apple", "enchanted_golden_apple", "melon_slice", "sweet_berries", "glow_berries",
+              "chorus_fruit", "carrot", "golden_carrot", "potato", "baked_potato", "poisonous_potato", "beetroot",
+              "dried_kelp", "beef", "cooked_beef", "porkchop", "cooked_porkchop", "mutton", "cooked_mutton", "chicken",
+              "cooked_chicken", "rabbit", "cooked_rabbit", "cod", "cooked_cod", "salmon", "cooked_salmon", "tropical_fish",
+              "pufferfish", "bread", "cookie", "cake", "pumpkin_pie", "rotten_flesh", "spider_eye", "mushroom_stew",
+              "beetroot_soup", "rabbit_stew", "suspicious_stew", "milk_bucket", "honey_bottle"]
+INGREDIENT_FIRST = ["coal", "charcoal", "raw_iron", "raw_copper", "raw_gold", "emerald", "lapis_lazuli", "diamond",
+                    "ancient_debris", "quartz", "amethyst_shard", "iron_nugget", "gold_nugget", "copper_nugget",
+                    "iron_ingot", "copper_ingot", "gold_ingot", "netherite_scrap", "netherite_ingot", "stick", "flint",
+                    "wheat", "bone", "bone_meal", "string", "feather", "snowball", "egg", "leather", "rabbit_hide",
+                    "honeycomb", "resin_clump", "ink_sac", "glow_ink_sac", "turtle_scute", "armadillo_scute", "slime_ball",
+                    "clay_ball", "prismarine_shard", "prismarine_crystals", "nautilus_shell", "heart_of_the_sea",
+                    "fire_charge", "blaze_rod", "breeze_rod", "heavy_core", "nether_star", "ender_pearl", "ender_eye",
+                    "shulker_shell", "popped_chorus_fruit", "echo_shard"]
+
+
+CAT_COLORED, CAT_FUNCTIONAL, CAT_TOOLS, CAT_COMBAT = 1, 3, 4, 5
+TOOLS_EXTRA = {"bucket", "brush", "lead", "name_tag", "goat_horn", "carrot_on_a_stick", "warped_fungus_on_a_stick", "map",
+               "compass", "recovery_compass", "clock", "bundle"}
+COMBAT_EXTRA = {"mace", "end_crystal", "shield", "wolf_armor"}
+FUNCTIONAL_EXTRA = {"armor_stand", "item_frame", "glow_item_frame", "painting", "flower_pot", "brewing_stand", "cauldron",
+                    "decorated_pot", "respawn_anchor", "sea_lantern", "ender_chest", "enchanting_table", "anvil", "bell"}
+NATURAL_EXTRA = {"bedrock", "calcite", "netherrack", "pale_moss_block", "sculk", "sculk_catalyst", "jack_o_lantern",
+                 "cocoa_beans", "nether_wart", "pitcher_pod", "potent_sulfur", "sulfur", "cinnabar"}
+
+
+def creative_tab(key, cat):
+    """Minecraft's tab for it (cat: what classify / the item's kind said)"""
+    if key.endswith("_spawn_egg"):
+        return CAT_SPAWN_EGGS
+    if key in REDSTONE_EXACT or any(w_ in key for w_ in REDSTONE_WORDS):
+        return CAT_REDSTONE
+    if key == "milk_bucket":
+        return CAT_FOOD
+    if key in TOOLS_EXTRA or key.endswith("_bucket") or key.endswith("_map") or key.endswith("_harness"):
+        return CAT_TOOLS
+    if key in COMBAT_EXTRA or key.endswith("_spear") or key.endswith("_horse_armor") or key.endswith("_nautilus_armor"):
+        return CAT_COMBAT
+    if key in FUNCTIONAL_EXTRA:
+        return CAT_FUNCTIONAL
+    if key in NATURAL_EXTRA or key.endswith("_seeds") or (key in NATURAL_FIRST and not stone_of(key)):
+        return CAT_NATURAL
+    if key in ("glass", "tinted_glass", "glass_pane") or any(
+            key.startswith(c + "_") and ("_wool_" in key or "_concrete_" in key) for c in COLORS):  # (their stairs, slabs)
+        return CAT_COLORED
+    return cat
+
+
+def wood_of(key):
+    stripped = key.startswith("stripped_")
+    k = key[9:] if stripped else key
+    for w_ in sorted(WOOD_TYPES, key=len, reverse=True):
+        if k.startswith(w_ + "_"):
+            part = k[len(w_) + 1:]
+            return w_, ("stripped_" + part) if stripped else part
+    return None, None
+
+
+def stone_of(key):
+    """(family, its modifiers, its shape) for blocks of a stone or metal family"""
+    k, mods, shape = key, [], ""
+    changed = True
+    while changed:
+        changed = False
+        for m_ in STONE_MODS:
+            if k.startswith(m_ + "_") and k[len(m_) + 1:]:
+                mods.append(STONE_MODS.index(m_) + 1)
+                k = k[len(m_) + 1:]
+                changed = True
+                break
+    for s_ in sorted(SHAPE_SUFFIXES, key=len, reverse=True):
+        if k.endswith("_" + s_):
+            shape, k = s_, k[:-len(s_) - 1]
+            break
+    if k.endswith("_block"):
+        k = k[:-6]
+    if k.endswith("bricks") or k.endswith("tiles"):
+        k = k[:-1]
+    if k == "smooth_stone":
+        k, mods = "stone", mods + [1]
+    if k not in STONE_FAMILIES:
+        return None
+    return STONE_FAMILIES.index(k), tuple(mods), SHAPE_SUFFIXES.index(shape) + 1 if shape else 0
+
+
+def creative_rank(key, cat):
+    if cat == CAT_NATURAL and key in NATURAL_FIRST:
+        return (0, NATURAL_FIRST.index(key))
+    if cat == CAT_FOOD and key in FOOD_ORDER:
+        return (0, FOOD_ORDER.index(key))
+    if cat == CAT_INGREDIENTS and key in INGREDIENT_FIRST:
+        return (0, INGREDIENT_FIRST.index(key))
+    wood, part = wood_of(key)
+    if wood:
+        wi, pi = WOOD_TYPES.index(wood), WOOD_PARTS.index(part) if part in WOOD_PARTS else len(WOOD_PARTS)
+        return (1, pi, wi) if cat == CAT_NATURAL else (1, wi, pi)  # (the natural tab: all logs, then all leaves...)
+    st = stone_of(key)
+    if st:
+        return (2,) + st
+    for c in sorted(COLORS, key=len, reverse=True):
+        if key.startswith(c + "_"):
+            rest = key[len(c) + 1:]
+            return (3, COLORED_KINDS.index(rest) if rest in COLORED_KINDS else len(COLORED_KINDS), rest, COLORS.index(c))
+    if key in COLORED_KINDS:
+        return (3, COLORED_KINDS.index(key), key, -1)
+    for m_ in MATERIALS:
+        if key.startswith(m_ + "_"):
+            part = key[len(m_) + 1:]
+            mi = MATERIALS.index(m_)
+            if part in TOOL_KINDS:
+                return (4, 0, mi, TOOL_KINDS.index(part))
+            if part in WEAPON_KINDS:
+                return (4, 1, WEAPON_KINDS.index(part), mi)
+            if part in ARMOR_KINDS:
+                return (4, 2, mi, ARMOR_KINDS.index(part))
+            if part == "horse_armor":
+                return (4, 3, mi, 0)
+    for gi, suf in enumerate(("_pottery_sherd", "_smithing_template", "_banner_pattern")):
+        if key.endswith(suf):
+            return (10, gi, key)  # (at the end of the ingredients, each kind together)
+    return (9, key)
+
+
+for k_, b_ in blocks.items():
+    b_["category"] = creative_tab(k_, b_["category"])
+for k_, it_ in items.items():
+    it_["category"] = creative_tab(k_, it_.get("category", CAT_INGREDIENTS))
+
+# Ids are saved in the worlds (blocks in the chunks, items in inventories and chests): they must never move. The
+# order they had is kept in tools/ids_frozen.json; what is new goes after it.
+FROZEN = os.path.join(ROOT, "tools", "ids_frozen.json")
+if os.path.exists(FROZEN):
+    fz = jload(FROZEN)
+    lost = [k for k in fz["blocks"] if k not in blocks] + [k for k in fz["items"] if k not in items]
+    assert not lost, "these had ids and are gone: " + ", ".join(lost)
+    block_keys = fz["blocks"] + [k for k in blocks if k not in set(fz["blocks"])]
+    item_keys = fz["items"] + [k for k in items if k not in set(fz["items"])]
+    blocks = OrderedDict((k, blocks[k]) for k in block_keys)
+    items = OrderedDict((k, items[k]) for k in item_keys)
+else:
+    block_keys = list(blocks.keys())
+    item_keys = list(items.keys())
+with open(FROZEN, "w", encoding="utf-8") as f:
+    json.dump({"blocks": block_keys, "items": item_keys}, f, indent=0)
 ID = {}
 for i, k in enumerate(block_keys):
     ID[k] = i + 1
@@ -1160,6 +1397,8 @@ for mat, fname in ARMOR_TEX.items():
 ent_add("PIG_SADDLE", gimg("entity/equipment/pig_saddle/saddle"))
 ent_add("XP_ORB", gimg("entity/experience/experience_orb"))
 ent_add("TRIDENT", gimg("entity/trident/trident"))
+ent_add("CREEPER", gimg("entity/creeper/creeper"))
+ent_add("WARDEN", gimg("entity/warden/warden"))
 ent.save(os.path.join(OUT, "entity.png"))
 
 # ======================================================================= sounds
@@ -1219,7 +1458,15 @@ SOUND_EVENTS = OrderedDict([
     ("STEP_WOOL", "block.wool.step"), ("STEP_METAL", "block.metal.step"), ("STEP_SNOW", "block.snow.step"),
     ("FIRE_AMBIENT", "block.fire.ambient"), ("FIRE_EXTINGUISH", "block.fire.extinguish"),
     ("LAVA_AMBIENT", "block.lava.ambient"), ("BURN", "entity.player.hurt_on_fire"),
+    ("CREEPER_PRIMED", "entity.creeper.primed"), ("CREEPER_HURT", "entity.creeper.hurt"),
+    ("CREEPER_DEATH", "entity.creeper.death"),
     ("CLICK", "ui.button.click"),
+    ("WARDEN_AMBIENT", "entity.warden.ambient"), ("WARDEN_HURT", "entity.warden.hurt"), ("WARDEN_DEATH", "entity.warden.death"),
+    ("WARDEN_ATTACK", "entity.warden.attack_impact"), ("WARDEN_ROAR", "entity.warden.roar"),
+    ("WARDEN_SONIC_CHARGE", "entity.warden.sonic_charge"), ("WARDEN_SONIC_BOOM", "entity.warden.sonic_boom"),
+    ("WARDEN_HEARTBEAT", "entity.warden.heartbeat"), ("WARDEN_LISTENING", "entity.warden.listening"),
+    ("WARDEN_LISTENING_ANGRY", "entity.warden.listening_angry"), ("WARDEN_SNIFF", "entity.warden.sniff"),
+    ("WARDEN_DIG", "entity.warden.dig"),
 ])
 
 
@@ -1386,6 +1633,22 @@ with open(os.path.join(GEN, "Assets.h"), "w", encoding="utf-8") as f:
     w("constexpr GuiRect ENT_ARMOR_INNER[NUM_ARMOR_MATS] = { " + ", ".join(f"ENT_ARMOR_{m.upper()}_2" for m in ARMOR_TEX) + " };\n")
     w("\n} // namespace mc\n")
 
+# the creative tabs' order (the game splits it into the tabs)
+def creative_key(k_):
+    cat_ = (blocks[k_] if k_ in blocks else items[k_])["category"]
+    return cat_, creative_rank(k_, cat_)
+
+
+creative = sorted(block_keys + item_keys, key=creative_key)
+with open(os.path.join(GEN, "CreativeOrder.cpp"), "w", encoding="utf-8") as f:
+    w = f.write
+    w('// AUTO-GENERATED by tools/gen_assets.py - do not edit\n#include "../GameTables.h"\n\nnamespace mc {\n\n')
+    w("// every block and item, in the order of Minecraft's creative tabs\n")
+    w(f"const int kCreativeOrderCount = {len(creative)};\nconst uint16_t kCreativeOrder[] = {{\n")
+    for i in range(0, len(creative), 16):
+        w("    " + ", ".join(str(ID[k_]) for k_ in creative[i:i + 16]) + ",\n")
+    w("};\n\n} // namespace mc\n")
+
 with open(os.path.join(GEN, "GameData.h"), "w", encoding="utf-8") as f:
     w = f.write
     w("// AUTO-GENERATED by tools/gen_assets.py - do not edit\n#pragma once\n#include <cstdint>\n\nnamespace mc {\n\n")
@@ -1404,13 +1667,15 @@ with open(os.path.join(GEN, "GameData.cpp"), "w", encoding="utf-8") as f:
     w('// AUTO-GENERATED by tools/gen_assets.py - do not edit\n#include "../GameTables.h"\n\nnamespace mc {\n\n')
     kind_enum = {"all": "SHAPE_CUBE", "bottom_top": "SHAPE_CUBE", "column": "SHAPE_COLUMN", "facing": "SHAPE_FACING",
                  "cube6": "SHAPE_FACING", "cross": "SHAPE_CROSS", "fluid": "SHAPE_FLUID",
-                 "fire": "SHAPE_FIRE"}
+                 "fire": "SHAPE_FIRE", "stairs": "SHAPE_STAIRS", "slab": "SHAPE_SLAB",
+                 "pane": "SHAPE_PANE", "fence": "SHAPE_FENCE", "wall": "SHAPE_WALL", "bed": "SHAPE_BED",
+                 "bed_head": "SHAPE_BED_HEAD"}
     w("const BlockDef kBlockDefs[NUM_BLOCKS] = {\n")
     w('    { "air", "Hava", { 0, 0, 0, 0, 0, 0 }, 0xFFFF, SHAPE_CUBE, RENDER_AIR, 0.0f, 0, 0, false, 0, 0, 0, false, 0, {} },\n')
     for k in block_keys:
         b = blocks[k]
         t = b["tex"]
-        if b["kind"] == "cube6":
+        if b["kind"] in ("cube6", "bed", "bed_head"):
             faces = [t["east"], t["west"], t["north"], t["south"], t["top"], t["bottom"]]
             lit = 0xFFFF
         elif b["kind"] == "facing":

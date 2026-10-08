@@ -5,6 +5,7 @@
 #include <cstdio>
 #include <cstdlib>
 
+#include "Beds.h"
 #include "BlockRules.h"
 #include "GameState.h"
 #include "Inventory.h"
@@ -116,7 +117,7 @@ void HotbarAndStats(Pieces& P, const HudFacts& f) {
                     P.Sprite(AT_BOTTOM, poisoned ? GUI_HEART_POISONED_HALF : GUI_HEART_HALF, x, yy);
             }
             // absorption: yellow hearts in rows above the red ones (the armour moves up)
-            const int absorb = (int)std::ceil(gSurvival.absorption);
+            const int absorb = (int)std::ceil(gSurvival.absorption + std::max(0.0f, f.hostAbsorb));
             const int absorbRows = (absorb + 19) / 20;
             for (int i = 0; i * 2 < absorb; ++i) {
                 float x = hx + (i % 10) * 8, yy = y - (10 + (i / 10) * 10);
@@ -124,8 +125,7 @@ void HotbarAndStats(Pieces& P, const HudFacts& f) {
                 P.Sprite(AT_BOTTOM, absorb >= i * 2 + 2 ? GUI_HEART_ABSORBING_FULL : GUI_HEART_ABSORBING_HALF, x, yy);
             }
             y -= absorbRows * 10;
-            int armor = ArmorPoints();
-            armor = std::max(armor, (int)std::round(Clamp(f.hostArmour, 0.0f, 1.0f) * 20.0f));
+            const int armor = ArmorPoints();
             if (armor > 0)
                 for (int i = 0; i < 10; ++i) {
                     const GuiRect& r = armor >= i * 2 + 2 ? GUI_ARMOR_FULL : armor == i * 2 + 1 ? GUI_ARMOR_HALF : GUI_ARMOR_EMPTY;
@@ -157,6 +157,27 @@ void HotbarAndStats(Pieces& P, const HudFacts& f) {
     if (gGame.selectedNameTimer > 0.0f && !gInv.Held().Empty()) {
         int a = (int)Clamp(gGame.selectedNameTimer * 255.0f, 0.0f, 255.0f);
         P.Text(AT_BOTTOM, ItemName(gInv.Held().id), 0, -(float)(gGame.gameMode == MODE_SURVIVAL ? 59 : 45), Argb(255, 255, 255, a), true, 1);
+    }
+}
+
+// ScreenEffectRenderer.renderFire: two flames (fire_1) rise from the bottom of the screen, left and right, mirrored; a
+// 1x1 sheet half a block in front of the eye of a 70 degree view, 0.24 to the side and 0.3 down
+void FireOverlay(Pieces& P, const HudFacts& f) {
+    const AnimDef& a = kAnims[ANIM_FIRE_1];
+    const int frame = ((int)(gGame.age * 20.0f) / std::max(1, (int)a.ticks)) % std::max(1, (int)a.frames);
+    const float u0 = (a.tile % ATLAS_TILES_PER_ROW) * 16.0f / ATLAS_SIZE, v0 = (a.tile / ATLAS_TILES_PER_ROW) * 16.0f / ATLAS_SIZE;
+    const float size = (float)a.px / ATLAS_SIZE, u = u0 + frame * size; // (the frames lie side by side)
+    const float halfH = 0.5f * std::tan(35.0f * kPi / 180.0f), halfW = halfH * std::max(0.5f, f.aspect);
+    for (int i = 0; i < 2; ++i) {
+        const float xc = -(i * 2 - 1) * 0.24f;
+        HudPiece& p = P.Add(HP_OVERLAY, AT_TOP_LEFT, 0.5f + (xc - 0.5f) / halfW * 0.5f, 0.5f - (0.5f - 0.3f) / halfH * 0.5f);
+        p.w = 1.0f / halfW * 0.5f;
+        p.h = 1.0f / halfH * 0.5f;
+        p.u0 = u + size; // (mirrored, as Minecraft draws it)
+        p.u1 = u;
+        p.v0 = v0;
+        p.v1 = v0 + size;
+        p.color = Argb(255, 255, 255, 230);
     }
 }
 
@@ -323,7 +344,11 @@ void BuildHud(const HudFacts& f, std::vector<HudPiece>& out) {
             P.FillScreen(Argb(0x2A, 0x50, 0xC8, 90));
         else if (fluid == ID_LAVA)
             P.FillScreen(Argb(0xE0, 0x50, 0x00, 215));
+        if (gSurvival.burn > 0.0f && gGame.cameraMode == CAM_FIRST && gGame.deathTime < 0.0f)
+            FireOverlay(P, f);
         Effects(P);
+        if (SleepFade() > 0.0f) // (Minecraft's dark blue)
+            P.FillScreen(Argb(0x10, 0x10, 0x20, (int)(SleepFade() * 255.0f)));
         if (gGame.screen == SCREEN_NONE && gGame.cameraMode != CAM_THIRD_FRONT) {
             HudPiece& c = P.Add(HP_SPRITE, AT_CENTRE, -7.5f, -7.5f);
             c.src = GUI_CROSSHAIR;

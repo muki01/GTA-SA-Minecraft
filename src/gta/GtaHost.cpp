@@ -1,5 +1,6 @@
 #include "GtaHost.h"
 
+#include "CClock.h"
 #include "CColPoint.h"
 #include "CEntity.h"
 #include "CExplosion.h"
@@ -72,6 +73,7 @@ struct GtaHost : Host {
     }
     bool CellBlocked(const Int3& c) override { return GtaCellBlocked(c); }
     bool Outdoors() override { return CGame::currArea == 0; }
+    bool Dark() override { return Outdoors() && (CClock::ms_nGameClockHours >= 21 || CClock::ms_nGameClockHours < 5); }
     bool OwnGround(const Int3& c, float* depthShade) override {
         if (!TerrainOwnsCell(c.x, c.y, c.z))
             return false;
@@ -165,6 +167,16 @@ struct GtaHost : Host {
     void Douse(const Vec3& at, float radius) override { gFireManager.ExtinguishPoint(at, radius); }
     void Ignite(const Vec3& at, float seconds, int spread) override { GtaIgnite(at, seconds, spread); }
     bool Thunderstorm() override { return CWeather::Rain > 0.1f; }
+    float ClockHours() override { return CClock::ms_nGameClockHours + CClock::ms_nGameClockMinutes / 60.0f; }
+    void SetClock(float hours, bool nextDay) override {
+        const int h = (int)hours, m = (int)((hours - h) * 60.0f);
+        CClock::SetGameClock((unsigned char)h, (unsigned char)m, nextDay ? (unsigned char)(CClock::CurrentDay % 7 + 1) : 0);
+    }
+    void ClearWeather() override {
+        CWeather::ForceWeatherNow(WEATHER_SUNNY_LA);
+        CWeather::ReleaseWeather(); // (the weather goes on from a sunny one)
+        CWeather::Rain = 0.0f;
+    }
     bool PlaceVehicle(int kind, const Vec3& at, float headingDeg) override { return GtaPlaceVehicle(kind, at, headingDeg); }
     void BoostVehicle(float seconds) override { GtaBoostVehicle(seconds); }
     bool ItemAttack(int special) override { return GtaItemAttack(special); }

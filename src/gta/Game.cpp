@@ -20,6 +20,7 @@
 #include "common.h"
 #include "extensions/ScriptCommands.h"
 
+#include "Beds.h"
 #include "Blocks.h"
 #include "Buildings.h"
 #include "Carve.h"
@@ -44,6 +45,7 @@
 #include "PedSkins.h"
 #include "Player3D.h"
 #include "Pose.h"
+#include "Renderers.h"
 #include "Render3D.h"
 #include "Save.h"
 #include "Sound.h"
@@ -177,6 +179,7 @@ void HandleDeath(CPlayerPed* ped) {
     }
     if (!dead && gWasDead)
         gSurvival.Respawn();
+        BedRespawn();
     gWasDead = dead;
 }
 
@@ -217,7 +220,11 @@ void UpdateHealthEffects(float dt, CPlayerPed* ped) {
     const bool fireResistance = HasEffect(EFFECT_FIRE_RESISTANCE);
     const float direct = gGta.directDamage;
     gGta.directDamage = 0.0f;
-    if (HealthTick(dt, ped->m_fHealth, maxH, direct)) {
+    // GTA's body armour is a pool of yellow hearts, as Minecraft's absorption (GTA's own bullets take it first too)
+    float armour = ped->m_fArmour;
+    const bool totem = HealthTick(dt, ped->m_fHealth, maxH, direct, &armour);
+    ped->m_fArmour = armour;
+    if (totem) {
         // a totem saved him: GTA's own fire around him goes out
         FireResistanceCleared(ped, fireResistance);
         gFireManager.ExtinguishPoint(ped->GetPosition(), 2.5f);
@@ -299,6 +306,7 @@ void SetNextWorld(int id, bool fresh) {
 
 static void ResetWorldState() {
     gWorld.Clear();
+    gSleep = SleepState();
     TerrainClear();
     CarveClear();
     BuildingsClear();
@@ -380,10 +388,13 @@ void GameInit() {
     gRules.explosionsBreakBlocks = gConfig.explosionsBreakBlocks;
     gRules.animals = gConfig.animals;
     gRules.maxAnimals = gConfig.maxAnimals;
+    gRules.monsters = gConfig.monsters;
+    gRules.maxMonsters = gConfig.maxMonsters;
     gRules.keepInventory = gConfig.keepInventory;
     LoadGtaModelNames();
     InstallCombatHooks();
     InstallMovementHooks();
+    InstallCollisionHooks();
     ActivateWorld();
 }
 
@@ -570,7 +581,7 @@ void ApplyFov(bool active) {
     if (gFovWritten == 0.0f || cur != gFovWritten)
         gGameFov = cur; // the game computed a new value this frame
     if (active && gConfig.fov > 0.0f && gGameFov > 1.0f && gGameFov < 170.0f) {
-        float want = std::tan(Rad(gConfig.fov * gGame.fovMod * (gGame.spyglass ? 0.1f : 1.0f)) * 0.5f);
+        float want = std::tan(Rad(FovWanted(gConfig.fov)) * 0.5f);
         float scale = want / (gFovK * std::tan(Rad(70.0f) * 0.5f));
         float fov = 2.0f * std::atan(std::tan(Rad(gGameFov) * 0.5f) * scale) * (180.0f / kPi);
         fov = Clamp(fov, 20.0f, 160.0f);
@@ -658,16 +669,10 @@ void GameAfterProcess() {
             } else {
                 gGame.rayOrigin = eye;
                 if (gConfig.viewBobbing && gGame.bob > 0.001f) {
-                    // GameRenderer.bobView
-                    CVector right = CVector::Cross(front, CVector(0, 0, 1));
-                    float rm = right.Magnitude();
-                    if (rm > 1e-3f) {
-                        right = right * (1.0f / rm);
-                        CVector up = CVector::Cross(right, front);
-                        float f1 = -gGame.walkDist * kPi, f2 = gGame.bob;
-                        pos = pos + up * std::fabs(std::cos(f1) * f2) - right * (std::sin(f1) * f2 * 0.5f);
-                        look = Normalized(front - up * std::tan(Rad(std::fabs(std::cos(f1 - 0.2f) * f2) * 5.0f)));
-                    }
+                    Vec3 p = pos, l = look;
+                    BobView(front, p, l);
+                    pos = ToGta(p);
+                    look = ToGta(l);
                 }
             }
         } else if (gGame.cameraMode == CAM_THIRD_FRONT) {
@@ -680,7 +685,7 @@ void GameAfterProcess() {
                 want = Clamp(off.Magnitude(), 4.0f, 45.0f);
             } else {
                 out = front;
-                want = 4.0f;
+                want = kThirdPersonDistance;
                 gGame.rayOrigin = eye;
             }
             pos = eye + out * CameraRoom(eye, out, want, !inVehicle);

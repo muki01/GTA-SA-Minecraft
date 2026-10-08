@@ -1,9 +1,279 @@
-GTA San Andreas - Minecraft Modu (surum 0.13)
+GTA San Andreas - Minecraft Modu (surum 0.50)
 ============================================
 Orijinal Minecraft dokulari, sesleri, modelleri, Turkce isimleri ve tarifleri kullanilir:
 410 blok, 390 esya, 543 tarif.
 
-0.13 SURUMUNDE YENILER
+0.50 SURUMUNDE YENILER
+- Yaratici envanter Minecraft'taki gibi: Redstone Bloklari ve Cagirma Yumurtalari sekmeleri eklendi, sekmeler Minecraft'taki yerlerinde.
+- Esyalar gruplu siralaniyor: agaclar turune gore (kutuk, odun, soyulmus, kalas, merdiven, yarim blok, cit), tas aileleri, renkler Minecraft sirasiyla, aletler malzemeye gore.
+- Yanlis sekmedeki esyalar duzeltildi (kovalar, haritalar Aletler'de; mizraklar, at zirhlari Savas'ta; tohumlar Dogal'da; cam ve yun/beton merdivenleri Renkli'de).
+
+0.49 SURUMUNDE GELENLER
+- Warden eklendi, Warden yumurtasi yaratici envanterde. Kordur: yuruyusunu duyar (egilirsen duymaz), 6 metreden kokunu alir.
+- Ofkelenince kukrer, sonra pesine duser: yakindan vurusu 15 kalp, uzaktan (3-15 m) duvarlardan gecen sonik patlamasi 5 kalp ve seni geri firlatir.
+- Ona vurursan hemen ofkelenir, geri itilmez. 250 kalp cani var, olunce sculk catalyst dusurur.
+- Bir dakika kimseye kizmazsa topraga gomulup gider.
+
+0.48 SURUMUNDE GELENLER
+- Yataklar eklendi (16 renk): iki blokluk, baktigin yone dogru konur; bir yarisini kirinca ikisi de gider.
+- Yataga sag tik: dogma noktasi olur. Gece (18:30-05:30) ya da firtinada uyursun; 5 saniye sonra sabah 06:00 olur, yagmur durur.
+- Yakinda creeper varsa uyuyamazsin. Shift ya da ziplama ile kalkarsin.
+- Olunce hastane yerine yataginda dogarsin (yatak kirilmissa veya ustu kapaliysa normal dogarsin).
+
+0.47 SURUMUNDE GELENLER
+- Ince cam (renkli camlar dahil), demir parmaklik, citler ve duvarlar eklendi; komsularina Minecraft'taki gibi baglanirlar.
+- Citler ve duvarlar 1.5 blok yuksekliginde carpisir, uzerinden atlanamaz.
+- Merdiven, yarim blok, cit ve duvar elde ve envanterde kendi seklinde gorunur; ince cam duz gorunur.
+- Yeni tarifler: citler, duvarlar, ince camlar, demir parmaklik.
+
+0.46 SURUMUNDE GELENLER
+  - YENI: MERDIVENLER (93 cesit) ve YARIM BLOKLAR / BASAMAKLAR (96 cesit): tahta, tas, tugla,
+    kumtasi, kuvars, bakir... Minecraft'taki gibi yerlestirilir (merdiven senden uzaga dogru
+    yukselir; bir blogun ust yarisina ya da altina koyarsan ters durur), uzerlerinden yurunerek
+    cikilir, iki yarim blok ust uste birlesir. Tarifleri de geldi: uretim tarifi sayisi 441'den
+    690'a cikti (merdiven: 6 tahta -> 4, yarim blok: 3 blok -> 6 ...).
+  - DUZELTME: ust uste koyulan yarim bloklar kirilinca 2 tane, tek yarim blok 1 tane dusuyor.
+
+0.45 SURUMUNDE GELENLER
+  - YENI: CREEPER YUMURTASI (Yaratici menude Araclar sekmesinde). Yere sag tikla, creeper cikar.
+  - Ic duzen: blok ve esya numaralari artik sabit (tools/ids_frozen.json): yeni blok / esya
+    eklense de eski dunyalardaki bloklar ve esyalar bozulmaz.
+
+0.44 SURUMUNDE GELENLER
+  - YENI: YANARKEN EKRANDA ALEV: birinci sahis kamerada yanarken (ates, lav, GTA atesi) ekranin
+    altindan Minecraft'taki gibi iki alev yukseliyor (Minecraft'in kendi alev dokusu, oynayan).
+
+0.43 SURUMUNDE GELENLER
+  - DUZELTME: Kirdigin / kazdigin deliklere dusen ARABALAR VE INSANLAR artik dipteki ve
+    kenardaki bloklarin USTUNDE DURUYOR, haritanin disina dusmuyor (kazilan zeminin bloklari
+    deligin icinde ve hemen yaninda GTA carpismasina da veriliyor).
+
+0.42 SURUMUNDE GELENLER
+  - YENI: KIRILAN YERLERE ARABALAR VE INSANLAR DA GIRIYOR: yerde kazdigin sutunlara ve binalarda
+    kirdigin deliklere artik GTA'nin araclari ve yayalari da dusuyor / giriyor (once sadece sen
+    girebiliyordun). Icerideki bloklara carparlar, onlarin ustunde dururlar. Log satiri:
+    "Hooks: vehicles and people fall into holes ok". Not: senden cok uzaktaki bir deligin dibinde
+    blok carpismasi olmadigi icin oraya dusen bir sey asagi dusmeye devam edebilir.
+
+0.41 SURUMUNDE GELENLER
+  - YENI: CREEPER! Geceleri (21:00 - 05:00, disarida) senden 30-75 m uzakta dogar, ayni anda en
+    fazla 4 tane (MinecraftSA.ini: Monsters=1, MaxMonsters=4). Hayatta Kalma modunda 16 m
+    icindeysen sana dogru yurur; 3 m'ye gelince durur, tssss diye ates alir, 1,5 saniye sisip
+    beyaz yanip soner ve PATLAR (3 blok yaricap, bloklari kirar, GTA patlamasi gibi hasar verir).
+    7 m'den fazla uzaklasirsan vazgecer ve soner. Vurunca kacmaz. Oldurursen 0-2 barut ve
+    5 tecrube duser. Yaratici modda sana dokunmaz.
+
+0.40 SURUMUNDE GELENLER
+  - DUZELTME: ARABALAR artik onlerine gecince DURUYOR / yavasliyor. GTA trafigi sadece
+    "carpismasi acik" yayalar icin yavasliyor, Minecraft hareketi ise oyuncunun carpismasini
+    kapali tutuyordu; araba onune bakarken oyuncu gorunur hale getiriliyor (koylu yumrugundaki
+    cozumun aynisi). Log satiri: "Hooks: traffic sees the player ok".
+
+0.39 SURUMUNDE GELENLER
+  - YENI: ATESTE YANMA Minecraft'taki gibi: atesin icindeyken yarim saniyede bir yarim kalp,
+    lavda yarim saniyede iki kalp gider; cikinca ustundeki ates 8 saniye (lavdan sonra 15 saniye)
+    devam eder ve sonene kadar saniyede yarim kalp gider. Su, GTA denizi ve yagmur sondurur.
+    GTA'nin kendi atesi (molotof, yanan araba) da ayni kurala uyar. Zirh ve sari kalpler hasari
+    azaltir, Ates Direnci iksiri hasari tamamen keser, Yaratici modda yanmazsin.
+
+0.38 SURUMUNDE GELENLER
+  - YENI: CELIK YELEK (can yelegi) artik zirh olarak degil EKSTRA SARI KALP olarak gorunuyor ve
+    calisiyor: tam bir yelek = 10 sari kalp. Hasar once sari kalplerden dusuyor (dusme, ates,
+    patlama dahil), bitince canin gidiyor. Zehir ve bogulma sari kalbi gecip dogrudan cana
+    vuruyor. Kayitta da kalir (GTA'nin kendi zirh degeri olarak saklaniyor).
+
+0.37 SURUMUNDE GELENLER
+  - YENI: POLIS YILDIZLARI artik sol altta, haritanin hemen altinda gorunuyor (aranma seviyen
+    kadar altin sarisi yildiz). Minecraft HUD'u acikken GTA'nin kendi HUD'u kapali oldugu icin
+    yildizlar da kayboluyordu.
+
+0.36 SURUMUNDE GELENLER
+  - HATA DUZELTMESI: Shift + tik ile alinan esyalar artik Minecraft'taki yuvaya gidiyor.
+    Sandiktan, firin cikisindan ve uretim sonucundan alinanlar once hotbar'in SAG ucuna (sonra
+    envanterin altindan yukari), uretim izgarasi / firin girisi / zirh yuvalarindan alinanlar
+    envanterin ustunden baslayip sonra hotbar'a soldan yerlesiyor.
+
+0.35 SURUMUNDE GELENLER
+  - Ic duzen: KALAN CIZIM KURALLARI da Minecraft kisminda (src/core/Renderers.cpp): yerdeki
+    esyalarin zipla-don hareketi, yanan TNT'nin sisip yanip sonmesi, XP kurelerinin boyu ve renk
+    nabzi, parcacik kareleri, dusen kum, ok / mizrak / kartopu cizimi, simsek, olta ipi ve
+    samandira, kazma catlaklari, yururken goruntu sallanmasi, kosarken / durbunle gorus acisi,
+    ucuncu sahis kamera mesafesi. GTA klasorunden Xp.cpp / Xp.h tamamen kalkti.
+    Oyunda bir sey degismemis olmali.
+
+0.34 SURUMUNDE GELENLER
+  - Ic duzen: OYUNCU ANIMASYONU (yurume / yuzme / sallanma sayaclari, elin inip kalkmasi, gorus
+    acisinin genislemesi, gerilmis yay / atilmis olta / dolu arbalet gorunusu, kol durusu, hasar
+    kizarmasi, olunce yana devrilme), LAV ve ATESIN canlanmasi (lav damlasi, ates dumani, sesleri),
+    SU ALTI KABARCIKLARI, menudeki ESYA SIMGELERI ve DAYANIKLILIK CUBUGU artik Minecraft
+    kisminda. GTA tarafinda GTA kemikleri, kamera, isiklar ve GTA insanlarini / araclarini yakma
+    kaldi. Oyunda bir sey degismemis olmali.
+
+0.33 SURUMUNDE GELENLER
+  - Ic duzen: MODELLER artik Minecraft kisminda (src/core/McModel.cpp, Pose.h): Steve ve
+    animasyonlari (yurume, egilme, vurma, yeme, yay / arbalet / mizrak durusu), zirh, elytra,
+    inek / domuz / koyun / tavuk, koylu / yagmaci / vindicator, eldeki esya, birinci sahis el,
+    mizrak modeli. Cekirdek dortgenleri uretiyor, GTA tarafi sadece ciziyor. Oyunda bir sey
+    degismemis olmali.
+
+0.32 SURUMUNDE GELENLER
+  - Ic duzen: BLOKLARIN GORUNUSU artik Minecraft kisminda (src/core/BlockMesh.cpp): hangi
+    yuzlerin gorundugu, dokular, yuz basina isik ve kose golgeleri (ambient occlusion), cicekler,
+    su ve lavin egimli yuzeyi ve akan dokusu, atesin egik alevleri, cam yan yana iken aradaki
+    yuzun gizlenmesi. GTA tarafi bu kosegenleri sadece kendi cizim bicimine ceviriyor.
+    Oyunda bir sey degismemis olmali.
+
+0.31 SURUMUNDE GELENLER
+  - Ic duzen: HUD ve EKRAN YERLESIMI artik Minecraft kisminda (src/core/Hud.cpp): hotbar, XP
+    cubugu ve seviye, kalpler (zehirde yesil, az canda titreme, sari kalp sirasi), zirh, aclik
+    (titreme, aclik efektinde yesil), hava kabarciklari, elindeki esyanin adi, efekt listesi, nisan,
+    su / lav icinde ekran rengi, envanter pencereleri (sekmeler, yazilar, firin atesi ve oku,
+    ustune gelinen yuva, ipucu), olum ekrani ve mesajlar. Cekirdek "neyi nereye" listesini
+    cikariyor, GTA tarafi sadece boyuyor. Oyunda bir sey degismemis olmali.
+
+0.30 SURUMUNDE GELENLER
+  - Ic duzen: ENVANTER EKRANLARININ KURALLARI artik Minecraft kisminda (src/core/Screens.cpp):
+    hangi ekranda hangi yuvalar nerede, yaratici sekmeleri, tiklama kurallari (alma, yariya bolme,
+    tek tek koyma, Shift ile tasima, uretim, zirh yuvalari, firin, sandik, yaratici paleti, cop
+    kutusu, pencere disina atma). GTA tarafinda sadece fare ve cizim kaldi. Oyunda bir sey
+    degismemis olmali.
+
+0.29 SURUMUNDE GELENLER
+  - Ic duzen: TIKLAMA AKISI artik Minecraft kisminda (src/core/Hands.cpp): her karede ellerin
+    ne yaptigi - hotbar, envanter tusu, el degistirme, esya atma, blok secme, sol el, yay / yemek,
+    sag tik (sandik / masa acma, koyluyle takas, hayvanla etkilesim, esya kullanma, blok koyma),
+    vurma ve kazma - ve oyun modu / kamera tuslari. GTA tarafinda sadece GTA tuslarini kapatmak,
+    fare imleci ve sut icince aranma seviyesinin silinmesi kaldi. Oyunda bir sey degismemis olmali.
+
+0.28 SURUMUNDE GELENLER
+  - Ic duzen: OLTA (balik tutma), KOYLULER (meslekleri, takas, sesleri, kafasini sana cevirmesi,
+    yuruyus animasyonu, olunce dusenler), OLUM ve HASAR kurallari (zirh, sari kalpler, Olumsuzluk
+    Totemi, olunce esyalarin dusmesi, aclikta kirmizi yanip sonme) ve yeni dunyadaki baslangic
+    esyalari artik Minecraft kisminda (src/core: Fishing, Villagers, Survival, GameState).
+    GTA tarafinda sadece "olta / ok kime takildi", ipin ve samandiranin cizimi, GTA insaninin
+    koylu gibi gosterilmesi kaldi. GTA klasorunden gereksiz include satirlari da silindi.
+    Oyunda bir sey degismemis olmali.
+
+0.27 SURUMUNDE GELENLER
+  - Ic duzen (8. adim): DOVUS ve ATISLAR artik Minecraft kisminda. Yumruk / kilic vurusu (guc
+    dolumu, kritik vurus, itme), yay, arbalet, uc disli mizrak, kartopu, yumurta, ender incisi,
+    ates topu, ruzgar topu, havai fisek, tecrube sisesi, cakmak, kovalar, yumurtadan hayvan
+    cikarma, tekne / maden arabasi koyma, simsek, koylu / yagmaci ganimeti - hepsi
+    src/core/Combat.cpp icinde. GTA tarafinda sadece "vurus / ok kime carpti" sorusu, GTA
+    insanina ve aracina hasar verme, Buyulu Sopa, arabaya takilan roket, cizim ve motor
+    kancalari kaldi (src/gta/GtaCombat.cpp). Oyunda bir sey degismemis olmali.
+
+0.26 SURUMUNDE GELENLER
+  - Ic duzen (9. adim): HAYVANLAR (inek, domuz, koyun, tavuk) artik Minecraft kisminda. Gezinme,
+    kacma, yemege gelme, ciftlesme, yumurta, yun kirkma, sut, eyer / binme, hasar, olunce
+    dusenler, suruler - hepsi src/core/Mobs.cpp icinde. GTA tarafinda sadece cizimleri,
+    arabalarin onlara carpmasi ve "haritanin neresinde suru cikabilir" sorusu kaldi.
+    Oyunda bir sey degismemis olmali.
+
+0.25 SURUMUNDE GELENLER
+  - KOYLULER ARTIK YUMRUK ATABILIYOR: kizan koyluler / cete uyeleri yanina gelip vurdugunda
+    yumruklari (sopa, bicak da) artik sana isliyor. Sebep: GTA yumrugu sadece "carpismasi
+    acik" kisilere isletiyor, Minecraft hareketi ise oyuncunun carpismasini kapali tutuyordu.
+    Yaratici modda (Minecraft'taki gibi) yine hasar almazsin.
+
+0.24 SURUMUNDE GELENLER
+  - EZILEN KOYLULERDEN DE ESYA DUSUYOR: surdugun araba / motorla ezip oldurdugun koyluler ve
+    yagmacilar (polisler) artik kilicla oldurulmus gibi esya ve XP birakiyor. Her olu bir
+    kere birakir.
+
+0.23 SURUMUNDE GELENLER (hata duzeltmeleri)
+  - ZIPLAMA: yukseklik artik kare hizina bagli degil, her zaman 1.25 blok (eskiden 30 FPS'te
+    1.38, 144 FPS'te 1.26 blok oluyordu).
+  - ATES DIRENCI: suresi dolunca artik gercekten bitiyor (eskiden simge kayboluyor ama
+    karakter atese dayanikli kalmaya devam ediyordu).
+  - ACLIK: kosarken aclik artik Minecraft'taki hizda azaliyor (eskiden iki kat hizli
+    azaliyordu, cunku kosmanin bedeli iki ayri yerde sayiliyordu).
+
+0.22 SURUMUNDE GELENLER
+  - Oyunda gorunen bir degisiklik YOK. Kod ayirmanin 7. adiminin son parcasi: DUNYA KAYIT
+    DOSYASI. Dosyanin Minecraft kismi (oyun modu, envanter, aclik, XP, bloklar) artik
+    "Minecraft cekirdegi"nde yaziliyor / okunuyor; GTA tarafi dosyayi acip sonuna kendi
+    kisimlarini (kazilan zemin, kirilan binalar) ekliyor. Dosya bicimi AYNI: eski kayitlarin
+    aynen aciliyor.
+
+0.21 SURUMUNDE GELENLER
+  - YENI OZELLIK: ARABA / MOTOR SURERKEN ELLER SERBEST. Artik direksiyondayken de yaya gibi:
+      * sol fare: baktigin blogu / GTA zeminini / duvari kirarsin, kilicla yakindakine vurursun
+      * sag fare: blok koyarsin, kova / cakmak / kemik tozu / zirh kullanirsin, sandik acarsin
+      * orta fare (yaratici): blok secersin
+    GTA'nin bu dugmelerdeki kendi isi bu sirada durur: sol fare ates etmez, sag fare el freni
+    cekmez. GTA'nin kendi tuslari aynen calisir: ates icin SOL CTRL, el freni icin SPACE.
+    Silahli araclarda (tank, Hunter, Hydra, Seasparrow, Rustler, RC Baron, itfaiye, S.W.A.T.,
+    Predator) sol fare yine aracin silahini ateslemeye devam eder (orada kirma / vurma yok,
+    sag fare ile koyma / kullanma var).
+    Arabadayken yapilamayanlar (eskisi gibi): esya atma (Q, GTA'da yana bakma tusu), el
+    degistirme (F, arabadan inme tusu), koyluyle ticaret, hayvana binme / sagma.
+  - Kod ayirmanin 7. adiminin ucuncu parcasi (bu kisimda gorunen degisiklik yok): blok kirma
+    (sure, alet, catlaklar, dusen esya), blok koyma (yon, bitki kurallari), kova / kemik tozu /
+    zirh kullanma, hizli erisim cubugu, el degistirme, esya atma, XP kureleri "Minecraft
+    cekirdegi"ne tasindi. GTA haritasindaki seylere bakma ve onlari kirma (zemin, duvar,
+    araba) GTA tarafinda kendi dosyasinda toplandi (GtaMining.cpp).
+
+0.20 SURUMUNDE GELENLER
+  - Kod ayirmanin 7. adiminin ilk iki parcasi:
+    * OYUN DURUMU "Minecraft cekirdegi"nde: oyun modu, acik ekran, oyuncunun baktigi yer, el
+      hareketleri, saldiri bekleme suresi, aletin yipranip kirilmasi, ekran acma / kapama
+      (kapaninca uretim izgarasindaki esyalarin envantere donmesi).
+    * YERDEKI SEYLER "Minecraft cekirdegi"nde: yere dusen esyalar (dusme, suda yuzme, lavda
+      yanma, birlesme, toplanma), bloklarin biraktigi esyalar, parcaciklar, yanan TNT, patlamanin
+      bloklari kirmasi, zincirleme TNT, esyalari savurmasi.
+    GTA tarafinda bunlarin cizimi ve "GTA haritasi / suyu / oyuncusu nerede" cevaplari kaldi
+    (hepsi tek dosyada: GtaHost.cpp). Her sey 0.19'daki gibi calismali.
+  - GTA klasorunde temizlik: hic cagrilmayan fonksiyonlar, kullanilmayan degiskenler ve gereksiz
+    dosya baglantilari silindi. Bundan sonra her adimin sonunda bu temizlik yapiliyor.
+
+0.19 SURUMUNDE GELENLER
+  - Tuslar ayni. Kod ayirmanin 6. adimi: TUSLAR. Minecraft'in
+    "eylemleri" (saldir / kir, kullan / koy, blok sec, zipla, egil, kos, envanter, esya at,
+    el degistir, 1-9 hizli erisim, bakis acisi, oyun modu, ekrani kapat) ve her birinin
+    Minecraft'taki varsayilan tusu artik "Minecraft cekirdegi"nde tanimli. GTA tarafi sadece
+    klavyeyi / fareyi okuyup "su eylem basili" diye bildiriyor; oyun kodu artik tusa degil
+    eyleme bakiyor. F6 (mod ac / kapa), F8 (Steve / CJ), F9 (radar) GTA'ya ozel oldugu icin
+    GTA tarafinda kaldi. MinecraftSA.ini'deki [Keys] ayarlari eskisi gibi gecerli.
+
+0.18 SURUMUNDE GELENLER
+  - Kod ayirmanin 5. adimi: SESLER. "Hangi olayda
+    hangi ses calinir" karari artik "Minecraft cekirdegi"nde veriliyor; GTA tarafi sadece sesi
+    hoparlorden caliyor. Bu adimda tasinan kararlar (daha once tasinan kurallarin sesleri):
+    adim sesleri, suya dusme, dusme sesi, yemek yeme / icme / gegirme, aclik hasari, zirhin
+    kirilmasi, totem, seviye atlama, lav + su tislamasi, atesin sonmesi, dusen blogun yere
+    konmasi, agacin buyumesi. Henuz tasinmamis kurallarin (kirma, savas, yaratiklar, ekranlar)
+    sesleri o kurallarla birlikte tasinacak. Her sey 0.17'deki gibi calismali.
+  - Testler artik "dogru olayda dogru ses calindi mi" diye de bakiyor.
+
+0.17 SURUMUNDE GELENLER
+  - Kod ayirmanin 4. adimi: BLOKLARIN KENDI KURALLARI "Minecraft cekirdegi"ne tasindi: su ve
+    lavin akmasi, lav + su = tas / obsidyen, atesin yanmasi, yayilmasi, sonmesi, TNT'yi
+    tutusturmasi, kum ve cakilin dusmesi, zemini giden bitkilerin dusmesi, fidanlarin agac
+    olmasi. GTA tarafinda "GTA haritasi burada dolu mu, arada duvar var mi, yagmur yagiyor
+    mu" sorularinin cevabi ile parcaciklar ve lav / atesin insanlari ve arabalari yakmasi
+    kaldi.
+
+0.16 SURUMUNDE GELENLER
+  - Kod ayirmanin 3. adimi: HAYATTA KALMA KURALLARI "Minecraft cekirdegi"ne tasindi: aclik ve
+    doygunluk, yemek yeme (altin elma, sut, bal, bozuk et...), etkiler (yenilenme, zehir,
+    aclik, direnc, emilim), su altinda hava ve bogulma, zirh, olumsuzluk totemi, deneyim (XP)
+    seviyeleri. GTA tarafinda sesler, parcaciklar, mesajlar ve canin GTA karakterine islenmesi
+    kaldi.
+
+0.15 SURUMUNDE GELENLER
+  - Kod ayirmanin 2. adimi: HAREKET KURALLARI (yurume, kosma, egilme, ziplama, dusme ve dusme
+    hasari, blok suyunda yuzme, lav, yaratici ucus, elytra) "Minecraft cekirdegi"ne tasindi.
+    GTA tarafinda sadece tuslari okumak, GTA haritasini engel olarak bildirmek ve sonucu
+    karaktere uygulamak kaldi.
+  - Bu kurallar artik oyunu acmadan da sinaniyor (yurume hizi 4.317, kosma 5.612, ziplama
+    yuksekligi, yarim bloga cikma, egilirken kenardan dusmeme, dusme hasari, yuzme, elytra...).
+
+0.14 SURUMUNDE GELENLER
+  - Kodun ic duzeni degisti: "Minecraft cekirdegi" (oyundan bagimsiz kurallar ve veriler) ile
+    "GTA SA baglantisi" ayri klasorlere ayrilmaya baslandi (1. adim).
+
+0.13 SURUMUNDE GELENLER
   - Kirilan yerlerde havada kalan ince cizgiler temizlendi (yan yana kirilan hucrelerin
     arasinda kalan ince kenar seritleri ve kesim sinirina denk gelen GTA parcalari).
   - Delik icindeki bloklarin dokusu duzeldi: her hucrede bir tam blok dokusu, duvarlarda dik

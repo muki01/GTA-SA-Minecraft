@@ -11,5 +11,7 @@ namespace mc {
 void CollisionUpdate();     // every frame (script phase)
 void CollisionForgetAll();  // after the game deleted objects (new game / load)
 bool IsCollisionObject(const CEntity* e);
+// GTA's own physics falls into the holes dug into its ground and broken into its buildings (engine hook)
+void InstallCollisionHooks();
 
 } // namespace mc

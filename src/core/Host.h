@@ -60,6 +60,7 @@ struct Host {
     virtual bool CellBlocked(const Int3& c) { return false; }                // someone or something of its own is in the cell
     virtual bool Raining() { return false; }                                 // rain puts fires out
     virtual bool Outdoors() { return true; }                                 // not inside one of its buildings
+    virtual bool Dark() { return false; }                                    // night on its map: monsters come out
     virtual bool SpawnGround(const Vec3& from, Vec3* ground) { return false; } // a spot below `from` where animals may appear
     // the cell is its own ground that was dug out (drawn only through its holes); *depthShade: darker deeper down
     virtual bool OwnGround(const Int3& c, float* depthShade) { return false; }
@@ -96,6 +97,9 @@ struct Host {
     virtual void FluidPlaced(const Int3& c) {}                               // a bucket was emptied here
     virtual void Douse(const Vec3& at, float radius) {}                      // water was poured: its fires there go out
     virtual void Ignite(const Vec3& at, float seconds, int spread) {}        // a fire of its own (spread: how often it may jump)
+    virtual float ClockHours() { return 12.0f; }                             // its clock, 0..24
+    virtual void SetClock(float hours, bool nextDay) {}                      // a night slept through
+    virtual void ClearWeather() {}                                           // (the storm is over too)
     virtual bool Thunderstorm() { return false; }                            // a trident calls down lightning
     virtual bool PlaceVehicle(int kind, const Vec3& at, float headingDeg) { return false; } // HostVehicle
     virtual void BoostVehicle(float seconds) {}                              // a firework strapped to the player's vehicle

@@ -32,6 +32,8 @@ struct Config {
     bool pedSkins = true;      // pedestrians -> villagers, police -> pillagers
     bool animals = true;
     int maxAnimals = 14;
+    bool monsters = true;
+    int maxMonsters = 4;
     bool npcArrows = true;     // police / gang guns and the helicopter shoot arrows
     bool minecraftPhysics = true; // our own walking / jumping / falling instead of GTA's
     bool minecraftMenu = true;  // title screen, world list and pause menu drawn the Minecraft way

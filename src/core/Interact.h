@@ -64,8 +64,8 @@ void PickBlock();                        // creative: the block looked at goes i
 
 // ---- using
 bool IsContainer(int block);             // crafting table, furnaces, chest, barrel
-bool TargetIsContainer();
-void OpenTargetContainer();
+bool TargetHasUse();   // a container or a bed
+void UseTargetBlock(); // opens it, lies down in it
 // does the main hand do anything with a use? (if not, the off hand gets it)
 bool HasRightClickUse(const ItemStack& s);
 bool UseWorldItem();                     // buckets, bone meal, putting armour on: true if the item did something

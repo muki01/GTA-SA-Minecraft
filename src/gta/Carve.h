@@ -17,6 +17,7 @@ namespace mc {
 bool CarvedAt(const CVector& p);
 // the camera is in space that was dug out of a building
 bool CarveInside(const CVector& cam);
+bool CarveAny(); // something was broken out of a building
 
 // The player broke the GTA surface at `cp` (looking along `dir`). `block` is what the surface is made of.
 // Returns the block to drop (ID_AIR if nothing happened).

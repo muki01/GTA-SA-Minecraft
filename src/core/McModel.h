@@ -20,6 +20,11 @@ struct ModelSink {
     virtual bool Opaque(int tile, int px, int py) = 0; // a pixel of an atlas tile (the edges of a flat item)
 };
 void SetModelSink(ModelSink* sink);
+ModelSink& TheModelSink();
+// a quad whose corners take the texture's corners in order: (u0, v0), (u1, v0), (u1, v1), (u0, v1)
+void ModelQuad(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, float u0, float v0, float u1, float v1, uint32_t col);
+uint32_t ModelColor(int r, int g, int b, int a = 255);
+uint32_t ModelGray(float v, int a = 255);
 
 struct ModelStyle {
     GuiRect tex{ 0, 0, 64, 64 }; // where the entity's texture sits inside entity.png
@@ -128,6 +133,10 @@ struct MobAnim {
     float wingFlap = 0;  // chicken
     bool sheared = false;
     bool saddled = false;  // pig
+    float swell = 0.0f;    // creeper: 0..1 before it blows up
+    float attack = 0.0f;   // warden: 1..0 as its arms come down on a blow
+    float pulse = 0.0f;    // warden: 1..0 after a heartbeat (its tendrils twitch)
+    float charge = -1.0f;  // warden: seconds into a sonic boom, < 0 none
 };
 void DrawMob(int kind, const Pose& base, const MobAnim& a, float light, float r, float g, float b);
 
@@ -146,8 +155,10 @@ struct IconQuad {
     float x[4], y[4];
     uint16_t tile;
     uint32_t color;
+    float u[4] = { 0, 1, 1, 0 }, v[4] = { 0, 0, 1, 1 }; // where in the tile each corner is (0..1)
 };
-int ItemIcon(uint16_t id, IconQuad out[3]); // how many quads
+constexpr int kMaxIconQuads = 40;
+int ItemIcon(uint16_t id, IconQuad out[kMaxIconQuads]); // how many quads
 // the bar under a worn tool: `width` of its 13 pixels, in its colour (green when new, red when nearly broken)
 bool DurabilityBar(const ItemStack& st, int* width, uint32_t* color);
 

@@ -35,6 +35,8 @@ bool TerrainCapAt(int x, int y, int z, float* top); // the cap cell of a closed 
 int TerrainCapBlock(int x, int y);   // what mining a cap gives
 // A GTA ray hit on ground that has been dug away (pass through it)
 bool TerrainIgnoreHit(const CVector& point, const CEntity* e);
+// any hole at all (dug into the ground or broken into a building)
+bool TerrainAnyHole();
 // Any dug column near `p` (the player then needs our own physics)
 bool TerrainNear(const CVector& p, float radius);
 bool TerrainCameraUnderground(const CVector& cam);

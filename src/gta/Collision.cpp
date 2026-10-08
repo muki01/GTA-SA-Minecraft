@@ -10,8 +10,11 @@
 #include "CWorld.h"
 #include "common.h"
 #include "extensions/ScriptCommands.h"
+#include "safetyhook.hpp"
 
 #include "Config.h"
+#include "Shapes.h"
+#include "Terrain.h"
 #include "World.h"
 
 namespace mc {
@@ -41,6 +44,7 @@ bool gDisabled = false;
 bool gStoreFull = false; // no more model ids: the slots we have are shared out to the nearest columns
 int gFreeCheckTimer = 0;
 int gFreeObjectSlots = 1000;
+std::vector<const CColModel*> gOurColModels; // the block columns' collision models
 } // namespace
 
 static uint32_t AtomicStoreCount() { return *reinterpret_cast<uint32_t*>(0xAAE950); }
@@ -87,6 +91,7 @@ static bool InitSlotModel(Slot& s) {
     s.col->m_bHasCollisionVolumes = 1;
     s.col->m_bIsActive = 1;
     s.col->m_pColData = s.data;
+    gOurColModels.push_back(s.col);
 
     CAtomicModelInfo* mi = CModelInfo::AddAtomicModel(id);
     // Draw distance 0 keeps CRenderer::ShouldModelBeStreamed() from ever requesting this model:
@@ -111,6 +116,17 @@ static void RebuildBoxes(Slot& s) {
         static std::vector<uint8_t> grid;
         grid.assign((size_t)CS * CS * H, 0);
         auto G = [&](int x, int y, int z) -> uint8_t& { return grid[(size_t)x + CS * ((size_t)y + CS * (size_t)z)]; };
+        // ground made from the GTA map counts only in and next to the holes dug into it (elsewhere the GTA ground
+        // lies over it): GTA's vehicles and people fall into the holes and land on it
+        bool nearHole[CS * CS] = {};
+        if (TerrainAnyHole())
+            for (int y = 0; y < CS; ++y)
+                for (int x = 0; x < CS; ++x) {
+                    const int wx = s.column.x * CS + x, wy = s.column.y * CS + y;
+                    for (int dy = -1; dy <= 1 && !nearHole[x + CS * y]; ++dy)
+                        for (int dx = -1; dx <= 1 && !nearHole[x + CS * y]; ++dx)
+                            nearHole[x + CS * y] = TerrainIsOpened(wx + dx, wy + dy);
+                }
 
         for (int cz : it->second) {
             Chunk* c = gWorld.FindChunk({ s.column.x, s.column.y, cz });
@@ -122,9 +138,41 @@ static void RebuildBoxes(Slot& s) {
                     for (int x = 0; x < CS; ++x) {
                         Voxel v = c->Get(x, y, z);
                         int b = VoxBlock(v);
-                        // ground made from the GTA map stays out of GTA's physics (only we walk in holes)
-                        if (IsSolidBlock(b) && !(VoxMeta(v) & META_NATURAL))
+                        if (IsSolidBlock(b) && !IsShapedBlock(b) && (!(VoxMeta(v) & META_NATURAL) || nearHole[x + CS * y]))
                             G(x, y, oz + z) = (uint8_t)(Block(b).surface + 1);
+                    }
+        }
+
+        // stairs and slabs: their own boxes
+        for (int cz : it->second) {
+            Chunk* c = gWorld.FindChunk({ s.column.x, s.column.y, cz });
+            if (!c)
+                continue;
+            for (int z = 0; z < CS; ++z)
+                for (int y = 0; y < CS; ++y)
+                    for (int x = 0; x < CS && s.boxes.size() < kMaxBoxes; ++x) {
+                        const Voxel v = c->Get(x, y, z);
+                        if (!IsShapedBlock(VoxBlock(v)))
+                            continue;
+                        ShapeBox sb[kMaxShapeBoxes];
+                        const int cellX = s.column.x * CS + x, cellY = s.column.y * CS + y, cellZ = cz * CS + z;
+                        const int n = BlockShapeBoxes(VoxBlock(v), VoxMeta(v), sb, ShapeConnectionsAt(cellX, cellY, cellZ), true);
+                        for (int i = 0; i < n; ++i) {
+                            CColBox box;
+                            memset(&box, 0, sizeof(box));
+                            const float wz = (float)(cz * CS + z);
+                            box.m_vecMin = CVector(x + sb[i].x0, y + sb[i].y0, wz + sb[i].z0);
+                            box.m_vecMax = CVector(x + sb[i].x1, y + sb[i].y1, wz + sb[i].z1);
+                            box.m_nMaterial = Block(VoxBlock(v)).surface;
+                            box.m_nLighting = kBoxLighting;
+                            s.boxes.push_back(box);
+                            bmin.x = std::min(bmin.x, box.m_vecMin.x);
+                            bmin.y = std::min(bmin.y, box.m_vecMin.y);
+                            bmin.z = std::min(bmin.z, box.m_vecMin.z);
+                            bmax.x = std::max(bmax.x, box.m_vecMax.x);
+                            bmax.y = std::max(bmax.y, box.m_vecMax.y);
+                            bmax.z = std::max(bmax.z, box.m_vecMax.z);
+                        }
                     }
         }
 
@@ -307,7 +355,8 @@ void CollisionUpdate() {
     for (auto& w : wants) {
         if (budget <= 0)
             break;
-        uint32_t ver = gWorld.columnVersion[w.col];
+        // (a hole opened anywhere can bring natural ground in: the terrain's version counts too)
+        uint32_t ver = gWorld.columnVersion[w.col] ^ (TerrainVersion() * 2654435761u);
         Slot* s = nullptr;
         auto it = gColumnToSlot.find(w.col);
         if (it != gColumnToSlot.end()) {
@@ -393,6 +442,57 @@ bool IsCollisionObject(const CEntity* e) {
         if (s.modelId == mi)
             return true;
     return false;
+}
+
+// ================================================================ GTA's own physics and the holes
+namespace {
+SafetyHookInline gColModelsHook;
+
+// CCollision::ProcessColModels against GTA's map: contacts inside the holes dug into its ground or broken into its
+// buildings do not count, so its vehicles and people fall in and land on the blocks there (those are ours: kept)
+int __cdecl HookProcessColModels(const CMatrix* ma, CColModel* ca, const CMatrix* mb, CColModel* cb, CColPoint* sphereCPs,
+                                 CColPoint* lineCPs, float* maxTouch, bool all) {
+    const bool holes = TerrainAnyHole() && std::find(gOurColModels.begin(), gOurColModels.end(), cb) == gOurColModels.end();
+    if (!holes)
+        return gColModelsHook.ccall<int>(ma, ca, mb, cb, sphereCPs, lineCPs, maxTouch, all);
+    // the wheels' lines as they were: a hit in a hole is taken back
+    CColPoint savedCP[16];
+    float savedTouch[16];
+    int lines = 0;
+    if (lineCPs && maxTouch && ca && ca->m_pColData) {
+        lines = std::min<int>(16, ca->m_pColData->m_nNumLines);
+        for (int i = 0; i < lines; ++i) {
+            savedCP[i] = lineCPs[i];
+            savedTouch[i] = maxTouch[i];
+        }
+    }
+    const int n = gColModelsHook.ccall<int>(ma, ca, mb, cb, sphereCPs, lineCPs, maxTouch, all);
+    int kept = 0;
+    for (int i = 0; i < n; ++i) {
+        if (TerrainIgnoreHit(sphereCPs[i].m_vecPoint, nullptr))
+            continue;
+        if (kept != i)
+            sphereCPs[kept] = sphereCPs[i];
+        ++kept;
+    }
+    if (kept != n)
+        sphereCPs[kept].m_fDepth = -1.0f; // (the end marker GTA expects after the last point)
+    for (int i = 0; i < lines; ++i)
+        if (maxTouch[i] != savedTouch[i] && TerrainIgnoreHit(lineCPs[i].m_vecPoint, nullptr)) {
+            lineCPs[i] = savedCP[i];
+            maxTouch[i] = savedTouch[i];
+        }
+    return kept;
+}
+} // namespace
+
+void InstallCollisionHooks() {
+    static bool done = false;
+    if (done)
+        return;
+    done = true;
+    gColModelsHook = safetyhook::create_inline(reinterpret_cast<void*>(0x4185C0), reinterpret_cast<void*>(&HookProcessColModels));
+    Log("Hooks: vehicles and people fall into holes %s", gColModelsHook ? "ok" : "FAILED");
 }
 
 } // namespace mc

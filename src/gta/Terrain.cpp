@@ -351,6 +351,8 @@ bool TerrainIgnoreHit(const CVector& p, const CEntity* e) {
     return c && c->opened && std::fabs(p.z - c->gz) < 0.8f;
 }
 
+bool TerrainAnyHole() { return !gOpened.empty() || CarveAny(); }
+
 bool TerrainNear(const CVector& p, float radius) {
     if (gOpened.empty())
         return false;

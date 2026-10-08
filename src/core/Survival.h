@@ -29,6 +29,9 @@ struct Survival {
     float healthSeen = -1.0f; // the host's health at the last look (<0: not looked at yet)
     float eatTimer = 0.0f;    // seconds the player has been eating what is in the hand
     float eatSoundTimer = 0.0f;
+    float burn = 0.0f;        // seconds the player keeps burning
+    float burnTimer = 0.0f;   // until the next point the flames take
+    float hotTimer = 0.0f;    // until fire or lava under him can hit again
     EffectState effects[EFFECT_COUNT];
     int xpLevel = 0;
     float xpProgress = 0.0f;  // 0..1 towards the next level
@@ -60,6 +63,11 @@ float AbsorbDamage(float loss, float maxHealth);
 
 // ---- air: ten bubbles that run out under water, then a drowning hit every second
 void BreathTick(float dt, bool underWater, bool mortal, float& health, float maxHealth, SurvivalEvents& ev);
+// Burning (Minecraft's fire ticks), once a frame: `hot` is what burns where the player is (ID_FIRE, ID_LAVA: our
+// blocks or the host's flames; ID_AIR), `wet` puts him out (water, rain). Fire hits him every half second for 1
+// point, lava for 4; then he burns on, 8 s after fire and 15 s after lava, a point a second. Fire resistance takes
+// the damage away. Health is the host's: it is taken here. True while he burns.
+bool BurnTick(float dt, int hot, bool wet, bool mortal, float& health, float maxHealth);
 // bubbles from the player's mouth under water (`bubbling`), and the burst when he drowns
 void BreathEffects(float dt, bool bubbling, bool drowned);
 
@@ -70,7 +78,8 @@ bool HungerTick(float dt, float& health, float maxHealth, SurvivalEvents& ev);
 // Once a frame, with the host's health (`direct`: what poison and drowning took since the last call, which nothing
 // blocks): what the host took away gets Minecraft's armour, resistance and absorption, then a totem of undying may
 // save the player; while he is dead the death screen's clock runs. True when a totem saved him.
-bool HealthTick(float dt, float& health, float maxHealth, float direct);
+// hostPool: yellow hearts the host keeps itself (body armour), in its health units; they go after the core's own.
+bool HealthTick(float dt, float& health, float maxHealth, float direct, float* hostPool = nullptr);
 void CreativeTick(float& health, float maxHealth); // creative: never hungry, never hurt for long
 inline bool TooHungryToSprint() { return gSurvival.food <= 6.0f; }
 

@@ -6,6 +6,7 @@
 #include "BlockRules.h"
 #include "Host.h"
 #include "Items.h"
+#include "Shapes.h"
 
 namespace mc {
 
@@ -323,6 +324,55 @@ void MeshChunk(const Chunk& c, BlockMesh& m) {
                         for (int i = 0; i < 4; ++i) {
                             const FirePlane& fp = FireFloorPlane(i);
                             plane(fp.p, fp.u, fp.v);
+                        }
+                    }
+                    continue;
+                }
+
+                // ---------------- blocks made of boxes (stairs, slabs): each box's faces, the texture as far as they reach
+                if (IsShapedBlock(block)) {
+                    ShapeBox boxes[kMaxShapeBoxes];
+                    const int connect = ShapeConnections(block, pad.At(x + 1, y, z), pad.At(x - 1, y, z), pad.At(x, y + 1, z),
+                                                         pad.At(x, y - 1, z));
+                    const int nb = BlockShapeBoxes(block, meta, boxes, connect);
+                    const bool clear = def.render == RENDER_TRANSLUCENT;
+                    auto& verts = clear ? m.tverts : m.verts;
+                    auto& shade = clear ? m.tshade : m.shade;
+                    for (int i = 0; i < nb; ++i) {
+                        const float lo[3] = { boxes[i].x0, boxes[i].y0, boxes[i].z0 }, hi[3] = { boxes[i].x1, boxes[i].y1, boxes[i].z1 };
+                        for (int f = 0; f < 6; ++f) {
+                            const Int3& d = FACE_DIR[f];
+                            const int dv[3] = { d.x, d.y, d.z };
+                            bool border = false; // (a face on the cell's border is hidden by a full block next to it)
+                            for (int a = 0; a < 3; ++a)
+                                border = border || (dv[a] > 0 && hi[a] >= 1.0f) || (dv[a] < 0 && lo[a] <= 0.0f);
+                            const int next = pad.At(x + d.x, y + d.y, z + d.z);
+                            if (border && (Occludes(next) || (f < FACE_TOP && FlushSides(def.shape, Block(next).shape))))
+                                continue;
+                            const TileUV uv = AtlasTileUV(BlockFaceTile(block, boxes[i].tileFace >= 0 ? boxes[i].tileFace : f, meta));
+                            const int turns = boxes[i].tileFace >= 0 ? 0 : ShapeUvTurns(block, meta, f);
+                            const int* c0 = kFaceCorners[f][0];
+                            const int* c1 = kFaceCorners[f][1];
+                            const int* c3 = kFaceCorners[f][3];
+                            for (int k = 0; k < 4; ++k) {
+                                const int* cc = kFaceCorners[f][k];
+                                float pos[3], fh = 0.0f, fv = 0.0f;
+                                for (int a = 0; a < 3; ++a) {
+                                    pos[a] = cc[a] ? hi[a] : lo[a];
+                                    fh += (pos[a] - c0[a]) * (c1[a] - c0[a]);
+                                    fv += (pos[a] - c0[a]) * (c3[a] - c0[a]);
+                                }
+                                TurnUv(turns, fh, fv);
+                                pushVertex(verts, wx + pos[0], wy + pos[1], wz + pos[2], uv.u0 + fh * (uv.u1 - uv.u0),
+                                           uv.v1 - fv * (uv.v1 - uv.v0), d);
+                                shade.push_back((uint8_t)Clamp(kFaceShade[f] * 255.0f, 0.0f, 255.0f));
+                                if (clear) {
+                                    m.tanim.push_back(0);
+                                } else {
+                                    m.emissive.push_back(def.emissive ? 1 : 0);
+                                    m.anim.push_back(0);
+                                }
+                            }
                         }
                     }
                     continue;

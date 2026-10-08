@@ -20,6 +20,7 @@ enum HudPieceKind {
     HP_GRADIENT, // the whole screen, from color at the top to color2 at the bottom, faded in by `scale`
     HP_TOOLTIP, // a tooltip box with `text`
     HP_PLAYER,  // the player's doll in the inventory (centre x, top y)
+    HP_OVERLAY, // a part of the block atlas over the screen: x, y, w, h are fractions of the screen
 };
 enum HudAnchor {
     AT_TOP_LEFT,
@@ -50,6 +51,7 @@ struct HudPiece {
     bool shadow = true;               // HP_TEXT
     bool outline = false;             // HP_TEXT: a black outline (the experience level)
     bool invert = false;              // HP_SPRITE: inverts what is behind it (the crosshair)
+    float u0 = 0.0f, v0 = 0.0f, u1 = 0.0f, v1 = 0.0f; // HP_OVERLAY: its texture coordinates in the atlas
 };
 
 // what the host knows this frame
@@ -57,10 +59,11 @@ struct HudFacts {
     bool shown = true;       // the HUD is on: the mod runs and the world is on screen
     bool hasPlayer = true;
     float health = 1.0f;     // the host's health, 0..1
-    float hostArmour = 0.0f; // the host's own body armour, 0..1
+    float hostAbsorb = 0.0f; // the host's own yellow hearts (body armour), in half hearts
     Vec3 camera;             // (inside our water or lava the screen is tinted)
     float mouseX = 0.0f, mouseY = 0.0f; // the mouse in GUI pixels from the open window's corner
     const char* playerName = "Steve";
+    float aspect = 16.0f / 9.0f; // the screen's width / height
 };
 
 // What to draw this frame, in the order to draw it. While a screen is open the host has built its slots (BuildSlots)

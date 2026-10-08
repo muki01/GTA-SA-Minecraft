@@ -7,6 +7,7 @@
 #include "GameState.h"
 #include "Host.h"
 #include "Interact.h"
+#include "Beds.h"
 #include "Inventory.h"
 #include "Items.h"
 #include "Mobs.h"
@@ -24,6 +25,12 @@ HandsResult HandsTick(float dt, const HandsFacts& f) {
     if (gGame.screen != SCREEN_NONE) {
         if (ActionPressed(ACT_INVENTORY) || ActionPressed(ACT_BACK) || !f.alive)
             CloseScreen();
+        r.blockPad = true;
+        return r;
+    }
+
+    // ------------------------------------------------ in bed: nothing but getting up
+    if (SleepTick(dt, !f.alive || f.inVehicle || ActionPressed(ACT_SNEAK) || ActionPressed(ACT_JUMP))) {
         r.blockPad = true;
         return r;
     }
@@ -54,7 +61,7 @@ HandsResult HandsTick(float dt, const HandsFacts& f) {
     if (ActionPressed(ACT_PICK_BLOCK))
         PickBlock();
 
-    const bool targetIsContainer = TargetIsContainer();
+    const bool targetHasUse = TargetHasUse();
 
     // the off hand gets the right click when the main hand has no use for it
     const bool useOff = !HasRightClickUse(gInv.Held()) && !gInv.offhand.Empty();
@@ -74,8 +81,8 @@ HandsResult HandsTick(float dt, const HandsFacts& f) {
     ItemStack& useItem = gInv.Held();
 
     // bow, crossbow, trident, spyglass; then food
-    const bool rmb = ActionDown(ACT_USE) && !targetIsContainer;
-    const bool charging = ChargedItemsTick(dt, rmb, ActionPressed(ACT_USE) && !targetIsContainer);
+    const bool rmb = ActionDown(ACT_USE) && !targetHasUse;
+    const bool charging = ChargedItemsTick(dt, rmb, ActionPressed(ACT_USE) && !targetHasUse);
     bool eating = false;
     if (!charging) {
         r.hadFireResistance = HasEffect(EFFECT_FIRE_RESISTANCE);
@@ -87,8 +94,8 @@ HandsResult HandsTick(float dt, const HandsFacts& f) {
     // use
     if (ActionPressed(ACT_USE) && !charging) {
         bool used = false;
-        if (targetIsContainer && !f.sneaking) {
-            OpenTargetContainer();
+        if (targetHasUse && !f.sneaking) {
+            UseTargetBlock();
             used = true;
         }
         const float targetDist = gTarget.valid ? (gTarget.point - gGame.rayOrigin).Length() : 1e9f;
@@ -115,7 +122,7 @@ HandsResult HandsTick(float dt, const HandsFacts& f) {
         }
         if (!used && !eating)
             PlaceHeldBlock();
-    } else if (ActionDown(ACT_USE) && PlaceReady() && !eating && !charging && !targetIsContainer &&
+    } else if (ActionDown(ACT_USE) && PlaceReady() && !eating && !charging && !targetHasUse &&
                IsBlockItem(useItem.id)) {
         PlaceHeldBlock();
     }

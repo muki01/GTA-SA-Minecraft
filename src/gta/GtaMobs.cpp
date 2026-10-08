@@ -121,6 +121,10 @@ void MobsRender(float light) {
         a.wingFlap = (std::sin(m.flap) + 1.0f) * m.flapSpeed;
         a.sheared = m.sheared;
         a.saddled = m.saddled;
+        a.swell = m.swell;
+        a.attack = m.attackAnim;
+        a.pulse = m.pulse;
+        a.charge = m.boom;
         DrawMob(m.kind, base, a, light, r, g, b);
         if (m.groundZ > -900.0f)
             AddShadow(CVector(m.pos.x, m.pos.y, m.groundZ), MobWidth(m) * 0.75f,

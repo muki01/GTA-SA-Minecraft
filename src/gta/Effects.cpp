@@ -1,5 +1,6 @@
 #include "Effects.h"
 
+#include "CFireManager.h"
 #include "CPlayerData.h"
 #include "CPlayerPed.h"
 #include "CWaterLevel.h"
@@ -7,6 +8,7 @@
 
 #include "BlockRules.h"
 #include "Game.h"
+#include "Host.h"
 
 namespace mc {
 
@@ -50,6 +52,18 @@ void EffectsUpdate(float dt, CPlayerPed* ped) {
                         FluidAt(eye) == ID_WATER);
     BreathTick(dt, under, survival, ped->m_fHealth, maxH, ev);
     BreathEffects(dt, under && survival, ev.drowned);
+
+    // burning: our fire and lava, or GTA's own flames on him (a molotov, a burning car); water and rain put him out
+    const CVector body = ped->GetPosition();
+    int hot = HotBlockAt(body - CVector(0, 0, 0.9f));
+    if (hot == ID_AIR)
+        hot = HotBlockAt(body);
+    if (hot == ID_AIR && ped->m_pFire)
+        hot = ID_FIRE;
+    const bool wet = gGta.swimming || FluidAt(body - CVector(0, 0, 0.5f)) == ID_WATER || TheHost().Raining();
+    if (wet && ped->m_pFire)
+        gFireManager.ExtinguishPoint(body, 3.0f);
+    BurnTick(dt, hot, wet, survival, ped->m_fHealth, maxH);
     gGta.directDamage += ev.directDamage;
     // GTA counts the player's breath too and would drown him on its own clock: keep it full
     if (ped->m_pPlayerData) {

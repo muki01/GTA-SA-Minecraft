@@ -63,7 +63,6 @@ struct Body {
     bool noFallDamage = false; // the next landing does not hurt (wind charge flights)
     float jumpCooldown = 0.0f;
     float stepDist = 0.0f;
-    float lavaTimer = 0.0f;
     bool wasInFluid = false;
 
     // the body starts being moved by these rules from here
@@ -92,7 +91,6 @@ struct WalkEvents {
     bool landed = false;         // touched the ground after being in the air
     float fallDamage = 0.0f;     // Minecraft health points (20 = full health); 0 = the landing did not hurt
     float fallHeight = 0.0f;     // of a landing that hurt
-    bool lavaBurn = false;       // the lava burns the body now
     float moved = 0.0f;          // horizontal distance
     float exhaustion = 0.0f;     // hunger cost of the jump and the sprinting
 };

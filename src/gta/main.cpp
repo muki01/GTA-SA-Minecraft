@@ -5,6 +5,7 @@
 
 #include "GtaCombat.h"
 #include "Config.h"
+#include "Collision.h"
 #include "Game.h"
 #include "GeoCut.h"
 #include "Gui.h"
@@ -21,7 +22,7 @@ using namespace plugin;
 class MinecraftSA {
 public:
     MinecraftSA() {
-        mc::Log("MinecraftSA 0.34 loading (game version: %s)", GetGameVersionName());
+        mc::Log("MinecraftSA 0.50 loading (game version: %s)", GetGameVersionName());
         if (!IsGameVersion10us()) {
             mc::Log("ERROR: only GTA SA 1.0 US is supported, mod disabled");
             MessageBoxA(nullptr, "MinecraftSA: sadece GTA San Andreas 1.0 US surumu destekleniyor.", "MinecraftSA",
@@ -34,6 +35,7 @@ public:
             mc::LoadTextures();
             mc::InstallCombatHooks();
             mc::InstallMovementHooks();
+            mc::InstallCollisionHooks();
             mc::InstallMenuHooks();
             mc::InstallGeoCutHooks();
             mc::Render3DInit();

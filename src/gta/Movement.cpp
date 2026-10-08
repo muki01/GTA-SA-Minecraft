@@ -15,6 +15,7 @@
 #include "common.h"
 #include "safetyhook.hpp"
 
+#include "Beds.h"
 #include "Carve.h"
 #include "Collision.h"
 #include "Config.h"
@@ -365,6 +366,20 @@ void Controller(float dt, CPlayerPed* ped, bool menuOpen) {
         return;
     }
 
+    // in bed: he lies still on it
+    Vec3 bed;
+    if (SleepSpot(&bed)) {
+        gBody.pos = bed + Vec3(0, 0, 1.0f);
+        gBody.vel = Vec3();
+        gBody.fallTop = gBody.pos.z;
+        OverridePhysics(ped, true);
+        ped->SetPosn(ToGta(gBody.pos));
+        ped->m_vecMoveSpeed = CVector(0, 0, 0);
+        gGame.flyVel = gBody.vel;
+        gGame.jumping = false;
+        return;
+    }
+
     WalkInput in;
     ReadMoveInput(in.fwd, in.strafe, false); // the stick stays for GTA's walking animation; we snap the position back
     if (menuOpen)
@@ -373,6 +388,7 @@ void Controller(float dt, CPlayerPed* ped, bool menuOpen) {
     const bool sneak = !menuOpen && ActionDown(ACT_SNEAK);
     const bool sprint = UpdateSprint(in.fwd > 0.1f, menuOpen) && !sneak;
     gGame.sprinting = sprint;
+    gGame.sneaking = sneak;
     pad->NewState.ButtonCross = sprint ? 255 : 0; // GTA's sprint animation
     // GTA crouches with one key press, Minecraft holds the sneak key
     if (sneak != (bool)ped->bIsDucking && gDuckCooldown <= 0.0f && gBody.onGround) {
@@ -403,11 +419,6 @@ void Controller(float dt, CPlayerPed* ped, bool menuOpen) {
     if (ev.sprintStopped)
         gGame.sprintLatch = false;
     gSurvival.exhaustion += ev.exhaustion;
-    if (ev.lavaBurn && gGame.gameMode == MODE_SURVIVAL && !ped->bFireProof) {
-        CWeapon::GenerateDamageEvent(ped, nullptr, WEAPONTYPE_FTHROWER, 20, (ePedPieceTypes)3, 0);
-        NoteDamage(STR_DEATH_LAVA);
-        gFireManager.StartFire(ped, nullptr, 1.0f, 1, 7000, 1);
-    }
 
     HitByVehicles(ped, dt);
     OverridePhysics(ped, true);
@@ -480,6 +491,7 @@ void RideUpdate(CPlayerPed* ped, bool menuOpen) {
     const CVector wish = ToGta(WishDir(gGame.lookDir, fwd, strafe));
     const bool sprint = UpdateSprint(fwd > 0.1f, menuOpen);
     gGame.sprinting = sprint;
+    gGame.sneaking = false;
     Vec3 seat;
     float yaw = 0.0f;
     if (!MobRide(gGame.ridingMob, wish * (sprint ? 6.5f : 4.0f), &seat, &yaw)) {
@@ -649,6 +661,7 @@ void UpdateMovement(float dt, CPlayerPed* ped) {
         const bool forward = pad->NewState.LeftStickY < -20;
         const bool sprint = UpdateSprint(forward, menuOpen);
         gGame.sprinting = sprint;
+        gGame.sneaking = false;
         pad->NewState.ButtonCross = sprint ? 255 : 0;
     } else {
         gGame.sprinting = pad->NewState.ButtonCross != 0 && (pad->NewState.LeftStickX != 0 || pad->NewState.LeftStickY != 0);
@@ -657,6 +670,20 @@ void UpdateMovement(float dt, CPlayerPed* ped) {
 
 namespace {
 SafetyHookInline gWorldProcessHook;
+SafetyHookInline gSlowForPedsHook;
+
+// GTA's traffic slows down only for people with collision (CCarCtrl::SlowCarDownForPedsSectorList, as since GTA III).
+// The Minecraft movement keeps the player's off, so cars ran him over: it is lent to him while a car looks ahead.
+void __cdecl HookSlowCarDownForPeds(void* list, CVehicle* vehicle, float x0, float y0, float x1, float y1, float* speed,
+                                    float curSpeed) {
+    CPlayerPed* player = FindPlayerPed();
+    const bool lend = player && !player->bUsesCollision && !player->bInVehicle && player->m_fHealth > 0.0f;
+    if (lend)
+        player->bUsesCollision = true;
+    gSlowForPedsHook.ccall<void>(list, vehicle, x0, y0, x1, y1, speed, curSpeed);
+    if (lend)
+        player->bUsesCollision = false;
+}
 
 // CWorld::Process moves every entity; GTA's walking animation moved the player too. Our position counts, and it
 // must be back before the doors (CEntryExitManager) and the camera run later in the same frame.
@@ -689,6 +716,8 @@ void InstallMovementHooks() {
     done = true;
     gWorldProcessHook = safetyhook::create_inline(reinterpret_cast<void*>(0x5684A0), reinterpret_cast<void*>(&HookWorldProcess));
     Log("Hooks: world process %s", gWorldProcessHook ? "ok" : "FAILED");
+    gSlowForPedsHook = safetyhook::create_inline(reinterpret_cast<void*>(0x425440), reinterpret_cast<void*>(&HookSlowCarDownForPeds));
+    Log("Hooks: traffic sees the player %s", gSlowForPedsHook ? "ok" : "FAILED");
 }
 
 void MovementAfterProcess(CPlayerPed* ped) {

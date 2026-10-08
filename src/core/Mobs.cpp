@@ -4,6 +4,7 @@
 
 #include "Audio.h"
 #include "BlockRules.h"
+#include "Combat.h"
 #include "Entities.h"
 #include "GameState.h"
 #include "Host.h"
@@ -18,6 +19,7 @@ struct MobType {
     float width, height, health, walk, run;
     SoundEvent say, hurt, death;
     uint16_t food[3]; // what it follows and eats
+    bool monster;     // hostile: no ambient sound, never runs away, 5 experience
 };
 const MobType kTypes[MOB_KIND_COUNT] = {
     { 0.9f, 1.4f, 10.0f, 1.25f, 3.4f, SND_COW_SAY, SND_COW_HURT, SND_COW_DEATH, { ID_WHEAT, 0, 0 } },
@@ -25,6 +27,8 @@ const MobType kTypes[MOB_KIND_COUNT] = {
     { 0.9f, 1.3f, 8.0f, 1.15f, 3.2f, SND_SHEEP_SAY, SND_SHEEP_HURT, SND_SHEEP_DEATH, { ID_WHEAT, 0, 0 } },
     { 0.4f, 0.7f, 4.0f, 1.0f, 2.8f, SND_CHICKEN_SAY, SND_CHICKEN_HURT, SND_CHICKEN_DEATH,
       { ID_WHEAT_SEEDS, ID_MELON_SEEDS, ID_PUMPKIN_SEEDS } },
+    { 0.6f, 1.7f, 20.0f, 1.2f, 2.6f, SND_CREEPER_HURT, SND_CREEPER_HURT, SND_CREEPER_DEATH, { 0, 0, 0 }, true },
+    { 0.9f, 2.9f, 500.0f, 1.6f, 5.0f, SND_WARDEN_AMBIENT, SND_WARDEN_HURT, SND_WARDEN_DEATH, { 0, 0, 0 }, true },
 };
 
 uint32_t gNextMobId = 1;
@@ -32,6 +36,8 @@ float gSpawnTimer = 3.0f;
 } // namespace
 
 std::vector<Mob> gMobs;
+
+bool IsMonster(int kind) { return kind >= 0 && kind < MOB_KIND_COUNT && kTypes[kind].monster; }
 
 float MobScale(const Mob& m) { return m.baby > 0.0f ? 0.5f : 1.0f; }
 float MobWidth(const Mob& m) { return kTypes[m.kind].width * MobScale(m); }
@@ -86,7 +92,7 @@ void DropLoot(const Mob& m) {
     if (m.baby > 0.0f)
         return;
     Vec3 at = m.pos + Vec3(0, 0, MobHeight(m) * 0.5f);
-    SpawnXp(at, 1 + rand() % 3);
+    SpawnXp(at, kTypes[m.kind].monster ? 5 : 1 + rand() % 3);
     auto drop = [&](uint16_t id, int lo, int hi) {
         int n = lo + (hi > lo ? rand() % (hi - lo + 1) : 0);
         if (m.burn > 0.0f) {
@@ -113,6 +119,12 @@ void DropLoot(const Mob& m) {
     case MOB_CHICKEN:
         drop(ID_FEATHER, 0, 2);
         drop(ID_CHICKEN, 1, 1);
+        break;
+    case MOB_CREEPER:
+        drop(ID_GUNPOWDER, 0, 2);
+        break;
+    case MOB_WARDEN:
+        drop(ID_SCULK_CATALYST, 1, 1);
         break;
     }
 }
@@ -257,6 +269,128 @@ void MoveMob(Mob& m, float dt) {
     m.pos = np;
 }
 
+// Creeper (SwellGoal): with a player in survival within 16 m it goes for him; from 3 m it stands and swells for 1.5 s,
+// then blows up; it only gives up when he gets more than 7 m away. True while it is after him.
+bool CreeperFuse(Mob& m, float dt, const Vec3& playerPos, const Vec3& toPlayer, float* speed, bool* looking) {
+    const float dist = (playerPos - Vec3(0, 0, 1.0f) - m.pos).Length(); // (the host's player position is his middle)
+    const bool target = gGame.gameMode == MODE_SURVIVAL && gGame.deathTime < 0.0f && dist < 16.0f;
+    if (!target || dist > 7.0f)
+        m.swellDir = -1;
+    else if (dist < 3.0f)
+        m.swellDir = 1;
+    const float before = m.swell;
+    m.swell = Clamp(m.swell + m.swellDir * dt / 1.5f, 0.0f, 1.0f);
+    if (before == 0.0f && m.swell > 0.0f) {
+        const Vec3 c = m.pos + Vec3(0, 0, MobHeight(m) * 0.5f);
+        PlaySfx(SND_CREEPER_PRIMED, &c, 1.0f, 0.5f);
+    }
+    if (!target)
+        return false;
+    m.goal = Flat(toPlayer);
+    m.moving = m.swellDir < 0; // it stands still while it swells
+    m.aiTimer = 0.5f;          // (when it loses him it soon wanders off)
+    *speed = kTypes[m.kind].run;
+    *looking = true;
+    return true;
+}
+
+// Warden: blind. It hears the player walk within 16 m (not when he sneaks): every 2 s a vibration, +35 anger; it
+// smells him within 6 m; a hit makes it furious (100). From 80 it roars, then goes for him: a blow takes 15 hearts,
+// and from more than 3 m (up to 15, through walls) it charges a sonic boom for 1.7 s that takes 5 hearts and throws
+// him back. Anger fades by 1 a second; after a minute without any it digs back into the ground. True while after him.
+bool WardenBrain(Mob& m, float dt, const Vec3& playerPos, float* speed, bool* looking) {
+    Host& host = TheHost();
+    const Vec3 c = m.pos + Vec3(0, 0, MobHeight(m) * 0.5f);
+    const Vec3 feet = playerPos - Vec3(0, 0, 1.0f); // (the host's player position is his middle)
+    Vec3 to = feet - m.pos;
+    const float dist = to.Length();
+    to.z = 0.0f;
+    const float flat = to.Length();
+    const bool prey = gGame.gameMode == MODE_SURVIVAL && gGame.deathTime < 0.0f;
+
+    m.listen = std::max(0.0f, m.listen - dt);
+    if (prey && dist < 16.0f && m.listen <= 0.0f) {
+        const Vec3 v = host.PlayerVelocity();
+        const bool steps = !gGame.sneaking && (Vec3(v.x, v.y, 0.0f).Length() > 0.8f || std::fabs(v.z) > 2.0f);
+        if (steps || dist < 6.0f) {
+            m.anger += steps ? 35.0f : 20.0f;
+            m.listen = 2.0f;
+            PlaySfx(steps ? (m.anger >= 80.0f ? SND_WARDEN_LISTENING_ANGRY : SND_WARDEN_LISTENING) : SND_WARDEN_SNIFF, &c);
+        }
+    }
+    m.anger = Clamp(m.anger - dt, 0.0f, 150.0f);
+    m.calm = m.anger > 0.0f ? 0.0f : m.calm + dt;
+    m.heart -= dt;
+    if (m.heart <= 0.0f) {
+        m.heart = 2.0f - Clamp(m.anger / 80.0f, 0.0f, 1.0f) * 1.2f; // it beats faster the angrier it is
+        m.pulse = 1.0f;
+        if (dist < 16.0f)
+            PlaySfx(SND_WARDEN_HEARTBEAT, &c, 0.8f);
+    }
+    m.pulse = std::max(0.0f, m.pulse - dt * 4.0f);
+    m.attackCooldown -= dt;
+    m.attackAnim = std::max(0.0f, m.attackAnim - dt * 2.5f);
+    m.boomCooldown -= dt;
+
+    if (!prey || m.anger < 80.0f) {
+        m.roared = false;
+        m.boom = -1.0f;
+        return false;
+    }
+    m.goal = Flat(to);
+    m.aiTimer = 0.5f;
+    *looking = true;
+    *speed = kTypes[m.kind].run;
+    if (!m.roared) {
+        m.roared = true;
+        m.roar = 4.2f;
+        PlaySfx(SND_WARDEN_ROAR, &c, 1.5f);
+    }
+    if (m.roar > 0.0f) {
+        m.roar -= dt;
+        m.moving = false;
+        return true;
+    }
+    if (m.boom < 0.0f && flat > 3.0f && dist < 15.0f && m.boomCooldown <= 0.0f) {
+        m.boom = 0.0f;
+        PlaySfx(SND_WARDEN_SONIC_CHARGE, &c, 3.0f);
+    }
+    if (m.boom >= 0.0f) {
+        m.moving = false;
+        m.boom += dt;
+        if (m.boom < 1.7f)
+            return true;
+        // the sonic boom: straight through anything in the way
+        m.boom = -1.0f;
+        m.boomCooldown = 3.3f;
+        const Vec3 mouth = m.pos + Vec3(0, 0, 1.6f);
+        const Vec3 line = playerPos - mouth;
+        for (int i = 1; i <= 8; ++i)
+            Puff(mouth + line * (i / 8.0f), TILE_P_GENERIC_0, 2, 0.3f, 0xFF60E8E0);
+        PlaySfx(SND_WARDEN_SONIC_BOOM, &c, 3.0f);
+        if (dist < 16.0f) {
+            if (host.PlayerVehicle() >= 0)
+                host.HurtVehicle(host.PlayerVehicle(), 10.0f);
+            else
+                host.HurtPlayer(10.0f);
+            const Vec3 dir = flat > 0.01f ? to * (1.0f / flat) : Vec3(0, 1, 0);
+            Gust(feet - dir * 0.8f + Vec3(0, 0, 0.5f), 1.5f, 14.0f, 4.0f, true);
+        }
+        return true;
+    }
+    m.moving = flat > 1.6f;
+    if (flat < 2.2f && std::fabs(feet.z - m.pos.z) < 2.5f && m.attackCooldown <= 0.0f) {
+        m.attackCooldown = 0.9f;
+        m.attackAnim = 1.0f;
+        if (host.PlayerVehicle() >= 0)
+            host.HurtVehicle(host.PlayerVehicle(), 30.0f);
+        else
+            host.HurtPlayer(30.0f);
+        PlaySfx(SND_WARDEN_ATTACK, &c);
+    }
+    return true;
+}
+
 void Think(Mob& m, float dt, bool playerOnFoot, const Vec3& playerPos, uint16_t playerHeld) {
     const MobType& t = kTypes[m.kind];
     m.aiTimer -= dt;
@@ -265,8 +399,16 @@ void Think(Mob& m, float dt, bool playerOnFoot, const Vec3& playerPos, uint16_t 
     toPlayer.z = 0.0f;
     const float playerDist = toPlayer.Length();
     bool looking = false;
+    bool chasing = false;
+    if (t.monster) {
+        m.panic = 0.0f; // monsters do not run away
+        chasing = m.kind == MOB_WARDEN ? WardenBrain(m, dt, playerPos, &speed, &looking)
+                                       : CreeperFuse(m, dt, playerPos, toPlayer, &speed, &looking);
+    }
 
-    if (m.panic > 0.0f) {
+    if (chasing) {
+        // (CreeperFuse or WardenBrain steered it)
+    } else if (m.panic > 0.0f) {
         m.panic -= dt;
         if (m.aiTimer <= 0.0f) {
             m.goal = RandomDir();
@@ -334,12 +476,33 @@ void Kill(Mob& m) {
     PlaySfx(kTypes[m.kind].death, &c, 1.0f, m.baby > 0.0f ? 1.5f : 0.9f + Rand01() * 0.2f);
 }
 
+// a spot on the host's ground 30 to 75 m from the player
+bool SpawnSpot(const Vec3& playerPos, Vec3* ground) {
+    float a = Rand01() * 6.2831853f, dist = 30.0f + Rand01() * 45.0f;
+    Vec3 from(playerPos.x + std::cos(a) * dist, playerPos.y + std::sin(a) * dist, playerPos.z + 30.0f);
+    return TheHost().SpawnGround(from, ground);
+}
+
 void TrySpawn(const Vec3& playerPos) {
-    if (!gRules.animals || !TheHost().Outdoors())
+    if (!TheHost().Outdoors())
+        return;
+    // at night creepers come out, one at a time
+    if (gRules.monsters && TheHost().Dark()) {
+        int monsters = 0;
+        for (auto& m : gMobs)
+            monsters += kTypes[m.kind].monster;
+        Vec3 ground;
+        if (monsters < gRules.maxMonsters && Rand01() < 0.5f) {
+            if (SpawnSpot(playerPos, &ground))
+                SpawnMob(MOB_CREEPER, ground, false);
+            return;
+        }
+    }
+    if (!gRules.animals)
         return;
     int wild = 0;
     for (auto& m : gMobs)
-        if (!m.persistent)
+        if (!m.persistent && !kTypes[m.kind].monster)
             ++wild;
     if (wild >= gRules.maxAnimals)
         return;
@@ -459,9 +622,13 @@ void MobHurt(int index, float halfHearts, const Vec3& from, float knock) {
         return; // dead, or still invulnerable from the last hit
     m.health -= halfHearts;
     m.hurt = 0.5f;
-    m.panic = 4.0f + Rand01() * 2.0f;
+    m.panic = kTypes[m.kind].monster ? 0.0f : 4.0f + Rand01() * 2.0f;
     m.aiTimer = 0.0f;
     m.love = 0.0f;
+    if (m.kind == MOB_WARDEN) {
+        m.anger = std::max(m.anger, 100.0f); // furious, and nothing knocks it back
+        knock = 0.0f;
+    }
     Vec3 c = m.pos + Vec3(0, 0, MobHeight(m) * 0.5f);
     if (knock > 0.0f) {
         Vec3 away = Flat(m.pos - from);
@@ -630,9 +797,25 @@ void MobsTick(float dt, const Vec3& playerPos, uint16_t playerHeld, bool playerO
             } else {
                 Think(m, dt, playerOnFoot, playerPos, playerHeld);
             }
+            if (m.swell >= 1.0f) {
+                // the creeper blows up (radius 3, as a creeper does) and is gone
+                const Vec3 at = m.pos + Vec3(0, 0, MobHeight(m) * 0.5f);
+                m.death = 1e9f; // (its own blast does not kill it a second time)
+                if ((playerPos - at).Length() < 7.0f)
+                    NoteDamage(STR_DEATH_EXPLOSION);
+                ExplodeAt(at, 3.0f, true, BLAST_TNT);
+                remove = true;
+            }
+
+            if (m.kind == MOB_WARDEN && m.calm >= 60.0f) {
+                // a minute with nobody to be angry at: it digs back into the ground
+                Puff(m.pos + Vec3(0, 0, 0.3f), TILE_P_GENERIC_0, 20, MobWidth(m), 0xFF203038, true);
+                PlaySfx(SND_WARDEN_DIG, &centre);
+                remove = true;
+            }
 
             m.sayTimer -= dt;
-            if (m.sayTimer <= 0.0f) {
+            if (m.sayTimer <= 0.0f && (!t.monster || (m.kind == MOB_WARDEN && m.anger < 80.0f))) {
                 m.sayTimer = 8.0f + Rand01() * 18.0f;
                 if (distToPlayer < 32.0f)
                     PlaySfx(t.say, &centre, 1.0f, m.baby > 0.0f ? 1.5f : 0.9f + Rand01() * 0.2f);

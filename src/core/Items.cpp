@@ -129,11 +129,15 @@ const std::vector<uint16_t>& CreativeItems(int category) {
     static bool init = false;
     if (!init) {
         init = true;
-        for (int b = 1; b < NUM_BLOCKS; ++b)
-            if (Block(b).shape != SHAPE_FLUID && Block(b).shape != SHAPE_FIRE)
-                lists[std::min<int>(Block(b).category, CAT_COUNT - 1)].push_back((uint16_t)b);
-        for (int i = FIRST_ITEM; i < ITEM_END; ++i)
-            lists[std::min<int>(Item(i).category, CAT_COUNT - 1)].push_back((uint16_t)i);
+        for (int n = 0; n < kCreativeOrderCount; ++n) {
+            const uint16_t id = kCreativeOrder[n];
+            if (id < NUM_BLOCKS) {
+                if (Block(id).shape != SHAPE_FLUID && Block(id).shape != SHAPE_FIRE && Block(id).shape != SHAPE_BED_HEAD)
+                    lists[std::min<int>(Block(id).category, CAT_COUNT - 1)].push_back(id);
+            } else if (IsValidItem(id)) {
+                lists[std::min<int>(Item(id).category, CAT_COUNT - 1)].push_back(id);
+            }
+        }
     }
     return lists[std::clamp(category, 0, CAT_COUNT - 1)];
 }
@@ -172,6 +176,14 @@ uint16_t BlockFaceTile(int block, int face, int meta) {
         if (src == 0 && (meta & META_LIT) && b.texFrontLit != 0xFFFF)
             return b.texFrontLit;
         return b.tex[kCompassFace[src]];
+    }
+    case SHAPE_BED:
+    case SHAPE_BED_HEAD: {
+        // the tiles are for a bed whose head is north; meta: the side its head is on
+        const int c = CompassOf(face);
+        if (c < 0)
+            return b.tex[face];
+        return b.tex[kCompassFace[(c - CompassOf(meta & 3) + 4) & 3]];
     }
     default:
         return b.tex[face];

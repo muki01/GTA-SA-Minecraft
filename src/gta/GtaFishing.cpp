@@ -17,6 +17,7 @@
 #include "Game.h"
 #include "PedSkins.h"
 #include "Pose.h"
+#include "Renderers.h"
 #include "Terrain.h"
 #include "Textures.h"
 
@@ -126,13 +127,7 @@ void FishingRender(float light) {
     const CVector R = cm.right * -1.0f, U = cm.at, F = cm.up, cam = cm.pos;
     d3::SetRaster(gEntityTex.Raster());
 
-    // the bobber always faces the camera
-    {
-        const float u0 = (float)ENT_HOOK.x / ENT_TEX_W, v0 = (float)ENT_HOOK.y / ENT_TEX_H;
-        const float u1 = (float)(ENT_HOOK.x + ENT_HOOK.w) / ENT_TEX_W, v1 = (float)(ENT_HOOK.y + ENT_HOOK.h) / ENT_TEX_H;
-        const CVector b = gBobber.pos - U * 0.1f;
-        d3::Quad(b - R * 0.25f + U * 0.5f, b + R * 0.25f + U * 0.5f, b + R * 0.25f, b - R * 0.25f, u0, v0, u1, v1, d3::Gray(light));
-    }
+    DrawFishingHook(R, U, light);
 
     // where the line leaves the rod
     CVector tip;
@@ -155,27 +150,7 @@ void FishingRender(float light) {
         tip = ped->GetPosition() + CVector(0, 0, (ped->bIsDucking ? 0.0f : 0.17f)) + right * 0.35f + fwd * 0.8f;
     }
 
-    // the line sags like Minecraft's: z follows (t^2 + t) / 2
-    const CVector start = gBobber.pos + CVector(0, 0, 0.25f);
-    const CVector d = tip - start;
-    const float u = (ENT_WHITE.x + 4.0f) / ENT_TEX_W, v = (ENT_WHITE.y + 4.0f) / ENT_TEX_H;
-    const RwUInt32 black = d3::Argb(0, 0, 0, 255);
-    CVector prev = start;
-    const int N = 16;
-    for (int k = 1; k <= N; ++k) {
-        float t = (float)k / N;
-        CVector p(start.x + d.x * t, start.y + d.y * t, start.z + d.z * (t * t + t) * 0.5f);
-        CVector mid = (p + prev) * 0.5f;
-        CVector toCam = cam - mid;
-        float camDist = toCam.Magnitude();
-        CVector side = CVector::Cross(p - prev, toCam);
-        float sm = side.Magnitude();
-        if (sm > 1e-6f) {
-            side = side * (std::max(0.004f, camDist * 0.0012f) / sm);
-            d3::Quad(prev - side, prev + side, p + side, p - side, u, v, u, v, black);
-        }
-        prev = p;
-    }
+    DrawFishingLine(tip, cam);
     d3::Flush();
 }
 

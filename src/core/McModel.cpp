@@ -4,6 +4,7 @@
 #include "BlockMesh.h"
 #include "GameState.h"
 #include "Items.h"
+#include "Shapes.h"
 
 namespace mc {
 
@@ -33,6 +34,12 @@ void Quad4(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, float
 } // namespace
 
 void SetModelSink(ModelSink* sink) { gSink = sink ? sink : &gNoSink; }
+ModelSink& TheModelSink() { return Sink(); }
+void ModelQuad(const Vec3& p0, const Vec3& p1, const Vec3& p2, const Vec3& p3, float u0, float v0, float u1, float v1, uint32_t col) {
+    Quad4(p0, p1, p2, p3, u0, v0, u1, v1, col);
+}
+uint32_t ModelColor(int r, int g, int b, int a) { return Argb(r, g, b, a); }
+uint32_t ModelGray(float v, int a) { return Gray(v, a); }
 
 // ================================================================ cubes
 void McCube(const Pose& pose, float x, float y, float z, float w, float h, float d, float U, float V,
@@ -404,6 +411,40 @@ void DrawBlockCube(const Pose& p, int block, float light) {
     }
 }
 
+// stairs, slabs, fences, walls as an item: their boxes (cell x east, y north, z up; the model's y is up, z south)
+void DrawBlockShape(const Pose& p, int block, float light) {
+    ShapeBox bx[kMaxShapeBoxes];
+    int tileBlock[kMaxShapeBoxes], meta = 0;
+    const int n = InventoryBoxes(block, bx, tileBlock, &meta);
+    const bool emissive = Block(block).emissive;
+    for (int i = 0; i < n; ++i) {
+        const float lo[3] = { bx[i].x0, bx[i].y0, bx[i].z0 }, hi[3] = { bx[i].x1, bx[i].y1, bx[i].z1 };
+        for (int f = 0; f < 6; ++f) {
+            const TileUV uv = AtlasTileUV(BlockFaceTile(tileBlock[i], bx[i].tileFace >= 0 ? bx[i].tileFace : f, meta));
+            const int turns = bx[i].tileFace >= 0 ? 0 : ShapeUvTurns(tileBlock[i], meta, f);
+            const int* c0 = kFaceCorners[f][0];
+            const int* c1 = kFaceCorners[f][1];
+            const int* c3 = kFaceCorners[f][3];
+            Vec3 q[4];
+            float us[4], vs[4];
+            for (int k = 0; k < 4; ++k) {
+                const int* cc = kFaceCorners[f][k];
+                float pos[3], fh = 0.0f, fv = 0.0f;
+                for (int a = 0; a < 3; ++a) {
+                    pos[a] = cc[a] ? hi[a] : lo[a];
+                    fh += (pos[a] - c0[a]) * (c1[a] - c0[a]);
+                    fv += (pos[a] - c0[a]) * (c3[a] - c0[a]);
+                }
+                TurnUv(turns, fh, fv);
+                q[k] = p.P(pos[0], pos[2], 1.0f - pos[1]);
+                us[k] = uv.u0 + fh * (uv.u1 - uv.u0);
+                vs[k] = uv.v1 - fv * (uv.v1 - uv.v0);
+            }
+            Sink().Quad(q, us, vs, Gray(emissive ? 1.0f : light * kFaceShade[f]));
+        }
+    }
+}
+
 void DrawSprite(const Pose& p, int tile, float light, bool glint) {
     TileUV uv = AtlasTileUV(tile);
     const float zf = 8.5f / 16.0f, zb = 7.5f / 16.0f;
@@ -478,8 +519,10 @@ void DrawItemModel(Pose p, uint16_t id, float light, int tileOverride, bool inHa
         DrawTridentModel(p, light);
         return;
     }
-    if (IsBlockItem(id) && Block(id).shape == SHAPE_CROSS)
+    if (IsBlockItem(id) && (Block(id).shape == SHAPE_CROSS || Block(id).shape == SHAPE_PANE))
         DrawSprite(p, Block(id).tex[0], light, false);
+    else if (IsBlockItem(id) && IsShapedBlock(id))
+        DrawBlockShape(p, id, light);
     else if (IsBlockItem(id))
         DrawBlockCube(p, id, light);
     else
@@ -707,6 +750,54 @@ void DrawMob(int kind, const Pose& base, const MobAnim& a, float light, float r,
         McCube(Part(base, 4, 12, -5, legA, 0, 0), -2, 0, -2, 4, 12, 4, 0, 16, st, 0, true);
         break;
     }
+    case MOB_CREEPER: {
+        // CreeperModel; CreeperRenderer: it swells from the feet up and flashes white before it blows up
+        st.tex = ENT_CREEPER;
+        const float f0 = Clamp(a.swell, 0.0f, 1.0f);
+        const float wobble = 1.0f + std::sin(f0 * 100.0f) * f0 * 0.01f;
+        const float f = f0 * f0 * f0 * f0;
+        const float sxz = (1.0f + f * 0.4f) * wobble, sy = (1.0f + f * 0.1f) / wobble;
+        const Vec3 feet = base.o + base.Y * 1.501f;
+        Pose cb = base;
+        cb.X = cb.X * sxz;
+        cb.Y = cb.Y * sy;
+        cb.Z = cb.Z * sxz;
+        cb.o = feet - cb.Y * 1.501f;
+        if (((int)(f0 * 10.0f)) % 2 == 1)
+            st.light = light + Clamp(f0, 0.5f, 1.0f) * 1.5f;
+        McCube(Part(cb, 0, 6, 0, a.headPitch, a.headYaw, 0), -4, -8, -4, 8, 8, 8, 0, 0, st);
+        McCube(Part(cb, 0, 6, 0), -4, 0, -2, 8, 12, 4, 16, 16, st);
+        McCube(Part(cb, -2, 18, 4, legA, 0, 0), -2, 0, -2, 4, 6, 4, 0, 16, st);
+        McCube(Part(cb, 2, 18, 4, legB, 0, 0), -2, 0, -2, 4, 6, 4, 0, 16, st);
+        McCube(Part(cb, -2, 18, -4, legB, 0, 0), -2, 0, -2, 4, 6, 4, 0, 16, st);
+        McCube(Part(cb, 2, 18, -4, legA, 0, 0), -2, 0, -2, 4, 6, 4, 0, 16, st);
+        break;
+    }
+    case MOB_WARDEN: {
+        // WardenModel (128 x 128) and WardenModel.animateWalk; a blow swings both arms down, a sonic boom throws the
+        // head back, the tendrils twitch with each heartbeat
+        st.tex = ENT_WARDEN;
+        const float f = std::min(0.5f, 3.0f * am), f1 = sw * 0.8662f, f4 = std::min(0.35f, f);
+        const float cs = std::cos(f1), sn = std::sin(f1);
+        const float blow = std::sin(Clamp(a.attack, 0.0f, 1.0f) * kPi) * 1.6f;
+        const float boom = a.charge >= 0.0f ? std::min(1.0f, a.charge / 1.2f) : 0.0f;
+        const Pose bone = Part(base, 0, 24, 0);
+        const Pose body = Part(bone, 0, -21, 0, 1.0f * cs * f4 - boom * 0.3f, 0, 0.1f * sn * f);
+        McCube(body, -9, -13, -4, 18, 21, 11, 0, 0, st);
+        McCube(Part(body, -7, -2, -4), -2, -11, -0.1f, 9, 21, 0, 90, 11, st);
+        McCube(Part(body, 7, -2, -4), -7, -11, -0.1f, 9, 21, 0, 90, 11, st, 0.0f, true);
+        const Pose head = Part(body, 0, -13, 0, a.headPitch + 1.2f * std::cos(f1 + kPi / 2.0f) * f4 - boom * 0.4f, a.headYaw,
+                               0.3f * sn * f);
+        McCube(head, -8, -16, -5, 16, 16, 10, 0, 32, st);
+        const float twitch = a.pulse * 0.35f;
+        McCube(Part(head, -8, -12, 0, twitch, 0, 0), -16, -13, 0, 16, 16, 0, 52, 32, st);
+        McCube(Part(head, 8, -12, 0, twitch, 0, 0), 0, -13, 0, 16, 16, 0, 58, 0, st);
+        McCube(Part(body, -13, -13, 1, -(0.8f * sn * f) - blow, 0, 0), -4, 0, -4, 8, 28, 8, 44, 50, st);
+        McCube(Part(body, 13, -13, 1, -(0.8f * cs * f) - blow, 0, 0), -4, 0, -4, 8, 28, 8, 0, 58, st);
+        McCube(Part(bone, -5.9f, -13, 0, std::cos(f1 + kPi) * f, 0, 0), -3.1f, 0, -3, 6, 13, 6, 76, 48, st);
+        McCube(Part(bone, 5.9f, -13, 0, cs * f, 0, 0), -2.9f, 0, -3, 6, 13, 6, 76, 76, st);
+        break;
+    }
     case MOB_PIG: {
         st.tex = ENT_PIG;
         Pose head = Part(base, 0, 12, -6, a.headPitch, a.headYaw, 0);
@@ -833,10 +924,60 @@ void DrawNpc(int kind, const Pose& base, const NpcAnim& a, float light, float r,
 }
 
 // ---------------------------------------------------------------- items in the GUI
-int ItemIcon(uint16_t id, IconQuad out[3]) {
+// the GUI's view of a block (from above, the south face on the left, the east face on the right), in GUI pixels
+static void IconPoint(float x, float y, float z, float* sx, float* sy) {
+    *sx = 8.0f - 7.07f * (1.0f - x) + 7.07f * y;
+    *sy = 15.88f - 3.53f * (1.0f - x) - 3.53f * y - 8.66f * z;
+}
+
+int ItemIcon(uint16_t id, IconQuad out[kMaxIconQuads]) {
     if (!IsValidItem(id))
         return 0;
-    if (IsBlockItem(id) && Block(id).shape == SHAPE_CROSS) {
+    if (IsBlockItem(id) && IsShapedBlock(id) && Block(id).shape != SHAPE_PANE) {
+        // its boxes, the far ones first, each with its top, south and east faces
+        ShapeBox bx[kMaxShapeBoxes];
+        int tileBlock[kMaxShapeBoxes], meta = 0;
+        const int n = InventoryBoxes(id, bx, tileBlock, &meta);
+        int order[kMaxShapeBoxes];
+        for (int i = 0; i < n; ++i)
+            order[i] = i;
+        auto front = [&](int i) { return (bx[i].x0 + bx[i].x1) - (bx[i].y0 + bx[i].y1) + (bx[i].z0 + bx[i].z1); };
+        std::sort(order, order + n, [&](int a, int b) { return front(a) < front(b); });
+        static const int kFaces[3] = { FACE_TOP, FACE_SOUTH, FACE_EAST };
+        static const uint32_t kShade[3] = { 0xFFFFFFFF, 0xFFCCCCCC, 0xFF999999 };
+        int q = 0;
+        for (int oi = 0; oi < n && q + 3 <= kMaxIconQuads; ++oi) {
+            const ShapeBox& b = bx[order[oi]];
+            const float lo[3] = { b.x0, b.y0, b.z0 }, hi[3] = { b.x1, b.y1, b.z1 };
+            for (int fi = 0; fi < 3; ++fi) {
+                const int f = kFaces[fi];
+                IconQuad& iq = out[q++];
+                iq.tile = BlockFaceTile(tileBlock[order[oi]], b.tileFace >= 0 ? b.tileFace : f, meta);
+                const int turns = b.tileFace >= 0 ? 0 : ShapeUvTurns(tileBlock[order[oi]], meta, f);
+                iq.color = kShade[fi];
+                const int* c0 = kFaceCorners[f][0];
+                const int* c1 = kFaceCorners[f][1];
+                const int* c3 = kFaceCorners[f][3];
+                // corners in the order of the cube's quads: top left, top right, bottom right, bottom left of the tile
+                static const int kCorner[4] = { 3, 2, 1, 0 };
+                for (int k = 0; k < 4; ++k) {
+                    const int* cc = kFaceCorners[f][kCorner[k]];
+                    float pos[3], fh = 0.0f, fv = 0.0f;
+                    for (int a = 0; a < 3; ++a) {
+                        pos[a] = cc[a] ? hi[a] : lo[a];
+                        fh += (pos[a] - c0[a]) * (c1[a] - c0[a]);
+                        fv += (pos[a] - c0[a]) * (c3[a] - c0[a]);
+                    }
+                    TurnUv(turns, fh, fv);
+                    IconPoint(pos[0], pos[1], pos[2], &iq.x[k], &iq.y[k]);
+                    iq.u[k] = fh;
+                    iq.v[k] = 1.0f - fv;
+                }
+            }
+        }
+        return q;
+    }
+    if (IsBlockItem(id) && (Block(id).shape == SHAPE_CROSS || Block(id).shape == SHAPE_PANE)) {
         out[0] = { { 0, 16, 16, 0 }, { 0, 0, 16, 16 }, (uint16_t)Block(id).tex[0], 0xFFFFFFFF };
         return 1;
     }

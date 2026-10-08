@@ -61,6 +61,10 @@ static const char* kDefaultIni =
     "Animals=1\r\n"
     "; ayni anda etrafta olabilecek en fazla hayvan sayisi\r\n"
     "MaxAnimals=14\r\n"
+    "; 1 = geceleri creeper cikar\r\n"
+    "Monsters=1\r\n"
+    "; ayni anda etrafta olabilecek en fazla creeper sayisi\r\n"
+    "MaxMonsters=4\r\n"
     "; 1 = polisler ve ceteler silah yerine ok atar (helikopter de)\r\n"
     "NpcArrows=1\r\n"
     "; 1 = Minecraft fizigi (yurume, ziplama, dusme, yuzme Minecraft'taki gibi). 0 = GTA fizigi\r\n"
@@ -139,6 +143,8 @@ void LoadConfig() {
     EnsureKey("PedSkins", "1", path);
     EnsureKey("Animals", "1", path);
     EnsureKey("MaxAnimals", "14", path);
+    EnsureKey("Monsters", "1", path);
+    EnsureKey("MaxMonsters", "4", path);
     EnsureKey("NpcArrows", "1", path);
     EnsureKey("MinecraftPhysics", "1", path);
     EnsureKey("GroundHoles", "1", path);
@@ -159,6 +165,8 @@ void LoadConfig() {
     c.animals = ReadInt("Settings", "Animals", c.animals, path) != 0;
     c.npcArrows = ReadInt("Settings", "NpcArrows", c.npcArrows, path) != 0;
     c.maxAnimals = std::clamp(ReadInt("Settings", "MaxAnimals", c.maxAnimals, path), 0, 40);
+    c.monsters = ReadInt("Settings", "Monsters", c.monsters, path) != 0;
+    c.maxMonsters = std::clamp(ReadInt("Settings", "MaxMonsters", c.maxMonsters, path), 0, 20);
     Log("Config loaded: guiScale=%d renderDist=%.0f colRadius=%.0f", c.guiScale, c.renderDistance, c.collisionRadius);
 }
 

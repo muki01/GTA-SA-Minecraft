@@ -636,6 +636,8 @@ bool CarvedAt(const CVector& p) {
     return false;
 }
 
+bool CarveAny() { return !gCarved.empty(); }
+
 bool CarveInside(const CVector& cam) { return CarvedCell(FloorI(cam.x), FloorI(cam.y), FloorI(cam.z)); }
 
 int CarveBreak(const CColPoint& cp, CEntity* ent, const CVector& dir, int block) {

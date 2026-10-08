@@ -35,6 +35,7 @@ struct GameState {
     bool gliding = false;     // elytra
     bool jumping = false;     // jump / fall in progress
     bool sprinting = false;
+    bool sneaking = false;  // (a warden does not hear him)
     bool sprintLatch = false; // the sprint key was tapped: keep sprinting until the player stops
     uint32_t ridingMob = 0;   // id of the animal we sit on (0 = none)
     Vec3 flyVel;              // m/s while flying / gliding / jumping
@@ -89,6 +90,8 @@ struct GameRules {
     bool animals = true;   // herds appear around the player
     int maxAnimals = 14;   // wild ones at a time
     bool keepInventory = true; // the player keeps his things when he dies
+    bool monsters = true;  // creepers come out at night
+    int maxMonsters = 4;   // at a time
 };
 extern GameRules gRules;
 

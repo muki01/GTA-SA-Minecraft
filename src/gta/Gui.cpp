@@ -7,6 +7,7 @@
 #include "CPad.h"
 #include "CPlayerPed.h"
 #include "CSprite2d.h"
+#include "CWanted.h"
 #include "RenderWare.h"
 #include "common.h"
 
@@ -135,17 +136,21 @@ void Text(const char* text, float x, float y, float s, RwUInt32 col = 0xFFFFFFFF
 }
 
 // ---------------------------------------------------------------- items
-void AtlasQuad4(int tile, const float* xs, const float* ys, RwUInt32 col) {
+// fu / fv: where in the tile each corner is (0..1)
+void AtlasQuad4(int tile, const float* xs, const float* ys, const float* fu, const float* fv, RwUInt32 col) {
     UseRaster(gAtlasTex.Raster());
     TileUV uv = AtlasTileUV(tile);
-    const float us[4] = { uv.u0, uv.u1, uv.u1, uv.u0 };
-    const float vs[4] = { uv.v0, uv.v0, uv.v1, uv.v1 };
+    float us[4], vs[4];
+    for (int i = 0; i < 4; ++i) {
+        us[i] = uv.u0 + fu[i] * (uv.u1 - uv.u0);
+        vs[i] = uv.v0 + fv[i] * (uv.v1 - uv.v0);
+    }
     Quad4(xs, ys, us, vs, col);
 }
 
 // the core's picture of the item (ItemIcon), GUI pixels times the scale
 void DrawItemIcon(uint16_t id, float x, float y, float s) {
-    IconQuad q[3];
+    IconQuad q[kMaxIconQuads];
     const int n = ItemIcon(id, q);
     for (int i = 0; i < n; ++i) {
         float xs[4], ys[4];
@@ -153,7 +158,7 @@ void DrawItemIcon(uint16_t id, float x, float y, float s) {
             xs[k] = x + q[i].x[k] * s;
             ys[k] = y + q[i].y[k] * s;
         }
-        AtlasQuad4(q[i].tile, xs, ys, q[i].color);
+        AtlasQuad4(q[i].tile, xs, ys, q[i].u, q[i].v, q[i].color);
     }
 }
 
@@ -421,11 +426,46 @@ static void Paint(const HudPiece& p, int s) {
         break;
     }
     case HP_TOOLTIP: Tooltip(p.text.c_str(), x, y, (float)s); break;
+    case HP_OVERLAY:
+        UseRaster(gAtlasTex.Raster());
+        Quad(p.x * W, p.y * H, (p.x + p.w) * W, (p.y + p.h) * H, p.u0, p.v0, p.u1, p.v1, p.color);
+        break;
     case HP_PLAYER:
         if (gGta.steve)
             DrawSteve2D(x, y, p.scale * s);
         break;
     default: break;
+    }
+}
+
+// a five-pointed star: five kites around its middle
+static void Star(float cx, float cy, float r, RwUInt32 col) {
+    UseRaster(gGuiTex.Raster());
+    const float u = (GUI_WHITE.x + 2.0f) / GUI_TEX_W, v = (GUI_WHITE.y + 2.0f) / GUI_TEX_H;
+    const float us[4] = { u, u, u, u }, vs[4] = { v, v, v, v };
+    const float ri = r * 0.382f; // the inner corners of a regular star
+    for (int i = 0; i < 5; ++i) {
+        const float a = i * (2.0f * kPi / 5.0f), d = kPi / 5.0f;
+        const float xs[4] = { cx, cx + std::sin(a - d) * ri, cx + std::sin(a) * r, cx + std::sin(a + d) * ri };
+        const float ys[4] = { cy, cy - std::cos(a - d) * ri, cy - std::cos(a) * r, cy - std::cos(a + d) * ri };
+        Quad4(xs, ys, us, vs, col);
+    }
+}
+
+// GTA's wanted level, centred under its radar (its own HUD is off while the Minecraft one is on)
+static void DrawWantedStars() {
+    CWanted* wanted = FindPlayerWanted();
+    const int level = wanted ? (int)std::min(6u, wanted->m_nWantedLevel) : 0;
+    if (level <= 0)
+        return;
+    const float W = (float)RsGlobal.maximumWidth, H = (float)RsGlobal.maximumHeight;
+    const float sx = W / 640.0f, sy = H / 448.0f; // GTA's HUD units
+    const float r = 6.5f * sy, step = 15.0f * sx;
+    const float y = H - 14.0f * sy; // the radar's disc ends 28 units above the bottom edge
+    const float x0 = 87.0f * sx - (level - 1) * step * 0.5f;
+    for (int i = 0; i < level; ++i) {
+        Star(x0 + i * step, y, r + 1.5f * sy, Argb(0, 0, 0, 230));
+        Star(x0 + i * step, y, r, Argb(232, 178, 56));
     }
 }
 
@@ -448,15 +488,18 @@ void GuiDrawHud() {
     if (ped) {
         const float maxH = ped->m_fMaxHealth > 1.0f ? ped->m_fMaxHealth : 100.0f;
         f.health = ped->m_fHealth / maxH;
-        f.hostArmour = ped->m_fArmour / 100.0f;
+        f.hostAbsorb = ped->m_fArmour / (maxH / 20.0f); // body armour shows as yellow hearts
     }
     f.camera = TheCamera.GetPosition();
     f.playerName = gGta.steve ? "Steve" : "CJ";
+    f.aspect = (float)RsGlobal.maximumWidth / std::max(1, RsGlobal.maximumHeight);
     static std::vector<HudPiece> pieces;
     pieces.clear();
     BuildHud(f, pieces);
     for (const HudPiece& p : pieces)
         Paint(p, s);
+    if (gGta.hudVisible)
+        DrawWantedStars();
     if (gGta.hudVisible && gGame.screen != SCREEN_NONE)
         GuiSprite(GUI_CURSOR, gGame.cursorX, gGame.cursorY, (float)std::max(1, s / 2)); // the mouse pointer
     Flush();

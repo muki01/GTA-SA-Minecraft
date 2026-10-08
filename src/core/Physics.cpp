@@ -4,6 +4,7 @@
 #include "BlockRules.h"
 #include "Items.h"
 #include "World.h"
+#include "Shapes.h"
 
 namespace mc {
 
@@ -37,7 +38,15 @@ void GatherBoxes(MoveWorld& world, const Aabb& b, std::vector<Aabb>& out) {
     for (int z = FloorI(b.z0) - 1; z <= FloorI(b.z1); ++z)
         for (int y = FloorI(b.y0); y <= FloorI(b.y1); ++y)
             for (int x = FloorI(b.x0); x <= FloorI(b.x1); ++x) {
-                if (gWorld.IsSolid(x, y, z)) {
+                const Voxel v = gWorld.Get(x, y, z);
+                if (IsShapedBlock(VoxBlock(v))) {
+                    ShapeBox sb[kMaxShapeBoxes];
+                    const int n = BlockShapeBoxes(VoxBlock(v), VoxMeta(v), sb, ShapeConnectionsAt(x, y, z), true);
+                    for (int i = 0; i < n; ++i)
+                        out.push_back({ x + sb[i].x0, y + sb[i].y0, z + sb[i].z0, x + sb[i].x1, y + sb[i].y1, z + sb[i].z1 });
+                    continue;
+                }
+                if (IsSolidBlock(VoxBlock(v))) {
                     out.push_back({ (float)x, (float)y, (float)z, x + 1.0f, y + 1.0f, z + 1.0f });
                     continue;
                 }
@@ -349,15 +358,6 @@ void WalkStep(Body& body, const WalkInput& in, float dt, MoveWorld& world, WalkE
     if (sprint && moved > 0.0f)
         ev.exhaustion += 0.1f * moved;
     ev.moved = moved;
-
-    // lava burns
-    if (inFluid && fluid == ID_LAVA) {
-        body.lavaTimer -= dt;
-        if (body.lavaTimer <= 0.0f) {
-            body.lavaTimer = 0.5f;
-            ev.lavaBurn = true;
-        }
-    }
 
     body.pos = pos;
 }

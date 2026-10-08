@@ -11,12 +11,21 @@
 #include "Host.h"
 #include "Interact.h"
 #include "Inventory.h"
+#include "BlockMesh.h"
 #include "Combat.h"
 #include "Fishing.h"
+#include "Hands.h"
+#include "Hud.h"
 #include "Items.h"
+#include "McModel.h"
 #include "Mobs.h"
+#include "Screens.h"
+#include "Shapes.h"
+#include "Beds.h"
 #include "Villagers.h"
 #include "Particles.h"
+#include "PlayerAnim.h"
+#include "Renderers.h"
 #include "Physics.h"
 #include "Save.h"
 #include "Survival.h"
@@ -377,12 +386,9 @@ static void TestPhysics() {
 
         Pool(ID_LAVA);
         b = Standing(0.5f, 0.5f);
-        int burns = 0;
-        for (int i = 0; i < 180; ++i) {
+        for (int i = 0; i < 180; ++i)
             WalkStep(b, in, dt, map, ev);
-            burns += ev.lavaBurn;
-        }
-        CHECK(ev.fluid == ID_LAVA && burns >= 6 && burns <= 7, "lava burned %d times in 3 s, want 6", burns);
+        CHECK(ev.fluid == ID_LAVA && ev.inFluid, "in lava (it burns: Survival BurnTick)");
         Pool(ID_AIR);
     }
 
@@ -469,6 +475,7 @@ struct TestHost : Host {
     Vec3 player;
     int placed = 0, explosions = 0, doused = 0, thingsBroken = 0;
     bool outdoors = true;
+    bool dark = false;
     bool herdGround = false; // animals may appear anywhere, at z = 10
     float sea = -1000.0f;    // its water stands this high everywhere
     bool soil = false;     // its ground is everywhere, and it is earth
@@ -477,6 +484,12 @@ struct TestHost : Host {
     bool thing = false;    // something of its own is in front of the player, two metres away
     bool Raining() override { return rain; }
     bool Outdoors() override { return outdoors; }
+    bool Dark() override { return dark; }
+    bool ownGround = false; // the dug ground's cells are the host's, half as bright
+    bool OwnGround(const Int3&, float* depthShade) override {
+        *depthShade = 0.5f;
+        return ownGround;
+    }
     bool SpawnGround(const Vec3& from, Vec3* ground) override {
         if (herdGround)
             *ground = Vec3(from.x, from.y, 10.0f);
@@ -618,6 +631,17 @@ struct TestHost : Host {
         }
         return false;
     }
+    int talks = 0;
+    HostHit BeingTrace(const Vec3& origin, const Vec3& dir, float reach) override {
+        HostHit h = Trace(origin, dir, reach, false);
+        h.hit = false;
+        h.vehicle = -1;
+        return h;
+    }
+    bool UseOnBeing(int) override {
+        ++talks;
+        return true;
+    }
     bool Fling(const HostHit& what, const Vec3& v) override {
         Vec3 at;
         if (!HookPoint(what, &at))
@@ -636,6 +660,13 @@ struct TestHost : Host {
     }
     void Ignite(const Vec3&, float seconds, int) override { fires.push_back(seconds); }
     bool Thunderstorm() override { return storm; }
+    float hours = 12.0f, clockSet = -1.0f;
+    bool clockNextDay = false;
+    float ClockHours() override { return hours; }
+    void SetClock(float h, bool nextDay) override {
+        clockSet = h;
+        clockNextDay = nextDay;
+    }
     bool PlaceVehicle(int kind, const Vec3&, float) override {
         if (vehiclesOk)
             lastPlaced = kind;
@@ -1798,19 +1829,19 @@ static void TestInteract() {
         gGame = GameState();
         CHECK(IsContainer(ID_CHEST) && IsContainer(ID_FURNACE) && IsContainer(ID_CRAFTING_TABLE) && !IsContainer(ID_STONE), "containers");
         LookFrom(eye, down);
-        CHECK(!TargetIsContainer(), "the floor is none");
+        CHECK(!TargetHasUse(), "the floor is none");
         gWorld.SetRaw(0, 0, 10, MakeVox(ID_CRAFTING_TABLE));
         LookFrom(Vec3(0.5f, 0.5f, 12.62f), down);
-        CHECK(TargetIsContainer(), "a crafting table is");
-        OpenTargetContainer();
+        CHECK(TargetHasUse(), "a crafting table is");
+        UseTargetBlock();
         CHECK(gGame.screen == SCREEN_CRAFTING && gGame.openPos == (Int3{ 0, 0, 10 }), "and opens its screen");
         CloseScreen();
         gWorld.SetRaw(0, 0, 10, MakeVox(ID_CHEST));
-        OpenTargetContainer();
+        UseTargetBlock();
         CHECK(gGame.screen == SCREEN_CHEST, "a chest opens the chest screen");
         CloseScreen();
         gWorld.SetRaw(0, 0, 10, MakeVox(ID_FURNACE));
-        OpenTargetContainer();
+        UseTargetBlock();
         CHECK(gGame.screen == SCREEN_FURNACE, "a furnace the furnace screen");
         CloseScreen();
     }
@@ -2654,6 +2685,9 @@ static void TestCombat() {
               "there the cow stands, and it stays for good");
         host.vehicle = 5;
         CHECK(!UseHeldItem() && gMobs.size() == 1, "not from a vehicle");
+        host.vehicle = -1;
+        gInv.Held() = Stack(ID_CREEPER_SPAWN_EGG);
+        CHECK(UseHeldItem() && gMobs.size() == 2 && gMobs[1].kind == MOB_CREEPER, "a creeper egg makes a creeper");
 
         CombatStage(host);
         gGame.lookDir = Vec3(0.6f, 0, -0.8f);
@@ -3038,8 +3072,24 @@ static void TestPlayerHealth() {
         HealthTick(0.05f, health, 100.0f, 0.0f);
         CHECK(Near(health, c - 20.0f) && Heard(SND_HURT) == 0 && gGame.hurtTimer == 0.5f, "in creative the host decides alone");
 
-        // the totem
+        // the host's own yellow hearts (body armour)
         gGame.gameMode = MODE_SURVIVAL;
+        gInv.armor[0] = gInv.armor[1] = ItemStack();
+        float pool = 15.0f;
+        health = 80.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f, &pool);
+        health -= 10.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f, &pool);
+        CHECK(Near(health, 80.0f) && Near(pool, 5.0f), "a hit takes the host's yellow hearts first");
+        health -= 10.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f, &pool);
+        CHECK(Near(health, 75.0f) && pool == 0.0f, "then the health");
+        health -= 10.0f;
+        pool = 50.0f;
+        HealthTick(0.05f, health, 100.0f, 10.0f, &pool);
+        CHECK(Near(health, 65.0f) && pool == 50.0f, "poison and drowning go past them");
+
+        // the totem
         gInv.armor[0] = gInv.armor[1] = ItemStack();
         gInv.Held() = Stack(ID_TOTEM_OF_UNDYING);
         health = 10.0f;
@@ -3048,6 +3098,37 @@ static void TestPlayerHealth() {
               "with sparks, a message and regeneration");
         health = 10.0f;
         CHECK(!HealthTick(0.05f, health, 100.0f, 0.0f) && Near(health, 50.0f) && !HasEffect(EFFECT_ABSORPTION), "only once; its yellow hearts soak up the next hit and are gone");
+
+        // burning
+        ClearEffects(); // (the totem gave fire resistance)
+        gSurvival.burn = 0.0f;
+        health = 100.0f;
+        CHECK(!BurnTick(0.05f, ID_AIR, false, true, health, 100.0f) && health == 100.0f, "nothing burns");
+        CHECK(BurnTick(0.05f, ID_FIRE, false, true, health, 100.0f) && Near(health, 95.0f) && Near(gSurvival.burn, 7.95f) &&
+                  gGame.deathCause == STR_DEATH_FIRE,
+              "stepping into fire: a hit, and he catches fire");
+        for (int i = 0; i < 10; ++i)
+            BurnTick(0.05f, ID_FIRE, false, true, health, 100.0f);
+        CHECK(Near(health, 90.0f), "in the flames a hit every half second (%.1f)", health);
+        float lowest = health;
+        int frames = 0;
+        while (BurnTick(0.05f, ID_AIR, false, true, health, 100.0f) && frames < 400)
+            ++frames;
+        lowest = health;
+        CHECK(frames > 150 && frames < 165 && lowest >= 45.0f && lowest <= 55.0f, "out of them he burns on for 8 s, a point a second (%.1f left)", lowest);
+        BurnTick(0.05f, ID_LAVA, false, true, health, 100.0f);
+        CHECK(Near(health, lowest - 20.0f) && gSurvival.burn > 14.0f && gGame.deathCause == STR_DEATH_LAVA, "lava: four points, 15 s of fire");
+        CHECK(!BurnTick(0.05f, ID_AIR, true, true, health, 100.0f) && gSurvival.burn == 0.0f, "water puts him out");
+        AddEffect(EFFECT_FIRE_RESISTANCE, 60.0f, 0);
+        const float unburnt = health;
+        for (int i = 0; i < 40; ++i)
+            BurnTick(0.05f, ID_LAVA, false, true, health, 100.0f);
+        CHECK(health == unburnt && gSurvival.burn > 0.0f, "fire resistance: burning without pain");
+        RemoveEffect(EFFECT_FIRE_RESISTANCE);
+        CHECK(!BurnTick(0.05f, ID_FIRE, false, false, health, 100.0f) && health == unburnt && gSurvival.burn == 0.0f, "creative: nothing");
+        health = 100.0f;
+        HealthTick(0.05f, health, 100.0f, 0.0f);
+        gGame.deathCauseTime = -100.0f; // (what hurt him last is long ago)
 
         // dead
         health = 0.0f;
@@ -3107,6 +3188,1561 @@ static void TestPlayerHealth() {
     ResetSurvival();
 }
 
+// one frame of the hands: `pressed` went down this frame, `down` are held
+static HandsResult Hands(std::initializer_list<Action> pressed, std::initializer_list<Action> down = {}, HandsFacts f = HandsFacts()) {
+    gControls = Controls();
+    for (Action a : down)
+        gControls.Set(a, true, false);
+    for (Action a : pressed)
+        gControls.Set(a, true, true);
+    InteractTick(0.05f);
+    return HandsTick(0.05f, f);
+}
+
+// holds a button for a while (pressed in the first frame)
+static HandsResult HoldHands(Action a, float seconds, HandsFacts f = HandsFacts()) {
+    HandsResult last, any;
+    for (float t = 0.0f; t < seconds; t += 0.05f) {
+        last = t == 0.0f ? Hands({ a }, { a }, f) : Hands({}, { a }, f);
+        if (last.finished)
+            any = last;
+    }
+    if (any.finished)
+        last.finished = any.finished;
+    return last;
+}
+
+static void TestHands() {
+    TestHost host;
+    SetHost(&host);
+    srand(1122);
+    const Vec3 down45 = Vec3(1, 0, -1) * (1.0f / std::sqrt(2.0f));
+
+    // screens
+    {
+        CombatStage(host);
+        HandsResult r = Hands({ ACT_INVENTORY });
+        CHECK(r.blockPad && gGame.screen == SCREEN_INVENTORY, "the inventory key opens the inventory");
+        r = Hands({ ACT_HOTBAR_3 });
+        CHECK(r.blockPad && !r.aimed && gInv.selected == 0, "while it is open the hands rest and GTA gets no buttons");
+        r = Hands({ ACT_INVENTORY });
+        CHECK(r.blockPad && gGame.screen == SCREEN_NONE, "the same key closes it");
+        Hands({ ACT_INVENTORY });
+        Hands({ ACT_BACK });
+        CHECK(gGame.screen == SCREEN_NONE, "so does Escape");
+        gGame.gameMode = MODE_CREATIVE;
+        Hands({ ACT_INVENTORY });
+        CHECK(gGame.screen == SCREEN_CREATIVE, "in creative the item tabs open");
+        HandsFacts dead;
+        dead.alive = false;
+        Hands({}, {}, dead);
+        CHECK(gGame.screen == SCREEN_NONE, "dying closes it");
+    }
+
+    // dead hands
+    {
+        CombatStage(host);
+        gGame.bowDraw = 0.5f;
+        gGame.spyglass = true;
+        gSurvival.eatTimer = 1.0f;
+        HandsFacts dead;
+        dead.alive = false;
+        const HandsResult r = Hands({ ACT_HOTBAR_3, ACT_INVENTORY }, {}, dead);
+        CHECK(!r.aimed && !r.blockPad && gInv.selected == 0 && gGame.screen == SCREEN_NONE, "the dead do nothing");
+        CHECK(gGame.bowDraw < 0.0f && !gGame.spyglass && gSurvival.eatTimer == 0.0f, "and let go of what they were doing");
+    }
+
+    // the hotbar, the hands, dropping
+    {
+        CombatStage(host);
+        HandsResult r = Hands({ ACT_HOTBAR_3 });
+        CHECK(r.aimed && !r.blockPad && gInv.selected == 2, "the hotbar keys");
+        gInv.Held() = Stack(ID_DIRT, 5);
+        gInv.offhand = Stack(ID_BREAD, 1);
+        HandsFacts nearCar;
+        nearCar.swapKeyFree = false;
+        Hands({ ACT_SWAP_HANDS }, {}, nearCar);
+        CHECK(gInv.Held().id == ID_DIRT, "next to a car the swap key is the host's");
+        Hands({ ACT_SWAP_HANDS });
+        CHECK(gInv.Held().id == ID_BREAD && gInv.offhand.id == ID_DIRT, "otherwise the hands swap");
+        HandsFacts car;
+        car.inVehicle = true;
+        Hands({ ACT_DROP }, {}, car);
+        CHECK(gDrops.empty() && gInv.Held().count == 1, "at the wheel the drop key is the host's");
+        Hands({ ACT_DROP });
+        CHECK(gDrops.size() == 1 && gInv.Held().Empty(), "on foot it drops the held item");
+        gInv.Held() = Stack(ID_DIRT, 5);
+        Hands({ ACT_DROP }, { ACT_DROP_STACK });
+        CHECK(gDrops.size() == 2 && gInv.Held().Empty() && gDrops[1].stack.count == 5, "with the stack key all of it");
+    }
+
+    // fighting and mining
+    {
+        CombatStage(host);
+        const int cow = SpawnMob(MOB_COW, Vec3(2.5f, 0.5f, 10.0f), true);
+        HandsFacts guns;
+        guns.vehicleGuns = true;
+        Hands({ ACT_ATTACK }, { ACT_ATTACK }, guns);
+        CHECK(gMobs[cow].health == 10.0f && gGame.swing < 0.0f, "when the button fires the vehicle's guns the hands do nothing");
+        Hands({ ACT_ATTACK }, { ACT_ATTACK });
+        CHECK(gMobs[cow].health == 9.0f, "otherwise they hit");
+
+        CombatStage(host);
+        gWorld.SetRaw(1, 0, 9, MakeVox(ID_DIRT));
+        gGame.lookDir = down45;
+        const int pig = SpawnMob(MOB_PIG, Vec3(1.5f, 0.5f, 10.0f), true);
+        Hands({ ACT_ATTACK }, { ACT_ATTACK });
+        CHECK(gMobs[pig].health == 9.0f, "a pig in front of the dirt is hit");
+        MobsClear();
+        for (int i = 0; i < 30; ++i)
+            Hands({}, { ACT_ATTACK });
+        CHECK(gWorld.GetBlock(1, 0, 9) == ID_DIRT, "holding the button after a hit does not dig");
+        Hands({});
+        HoldHands(ACT_ATTACK, 1.5f);
+        CHECK(gWorld.GetBlock(1, 0, 9) == ID_AIR && CountDrops(ID_DIRT) == 1, "pressed again it digs the dirt out");
+        gGame.attackTimer = 5.0f;
+        gGame.lookDir = Vec3(0, 0, 1);
+        Hands({ ACT_ATTACK }, { ACT_ATTACK });
+        CHECK(gGame.attackTimer == 0.0f && gGame.swing >= 0.0f, "a swing at the air starts the cooldown again");
+    }
+
+    // using
+    {
+        CombatStage(host);
+        gGame.lookDir = down45;
+        gInv.Held() = Stack(ID_OAK_PLANKS, 4);
+        Hands({ ACT_USE }, { ACT_USE });
+        CHECK(gWorld.GetBlock(1, 0, 10) == ID_OAK_PLANKS && gInv.Held().count == 3, "the use button places the held block");
+
+        CombatStage(host);
+        gWorld.SetRaw(2, 0, 10, MakeVox(ID_CRAFTING_TABLE));
+        gInv.Held() = Stack(ID_OAK_PLANKS, 4);
+        HandsResult r = Hands({ ACT_USE }, { ACT_USE });
+        CHECK(r.blockPad && gGame.screen == SCREEN_CRAFTING && gInv.Held().count == 4, "on a crafting table it opens the table");
+        CloseScreen();
+        HandsFacts sneak;
+        sneak.sneaking = true;
+        Hands({ ACT_USE }, { ACT_USE }, sneak);
+        CHECK(gGame.screen == SCREEN_NONE && gWorld.GetBlock(1, 0, 10) == ID_OAK_PLANKS && gInv.Held().count == 3,
+              "sneaking, the block goes against it");
+
+        CombatStage(host);
+        host.people.push_back({ Vec3(2.5f, 0.5f, 10.9f) });
+        Hands({ ACT_USE }, { ACT_USE });
+        CHECK(host.talks == 1, "somebody of the host's in front: the host is asked (villagers trade)");
+        HandsFacts car;
+        car.inVehicle = true;
+        Hands({ ACT_USE }, { ACT_USE }, car);
+        CHECK(host.talks == 1, "not from a vehicle");
+        host.people[0].centre.x = 5.5f;
+        Hands({ ACT_USE }, { ACT_USE });
+        CHECK(host.talks == 1, "nor further than 4 m");
+
+        CombatStage(host);
+        const int sheep = SpawnMob(MOB_SHEEP, Vec3(2.5f, 0.5f, 10.0f), true);
+        gInv.Held() = Stack(ID_SHEARS);
+        Hands({ ACT_USE }, { ACT_USE }, car);
+        CHECK(!gMobs[sheep].sheared, "an animal is not sheared from a vehicle");
+        Hands({ ACT_USE }, { ACT_USE });
+        CHECK(gMobs[sheep].sheared, "on foot it is");
+
+        CombatStage(host);
+        gInv.Held() = Stack(ID_SNOWBALL, 2);
+        Hands({ ACT_USE }, { ACT_USE }, car);
+        CHECK(gProjectiles.size() == 1 && gInv.Held().count == 1, "from a vehicle things are still thrown");
+    }
+
+    // food, the off hand, the bow
+    {
+        CombatStage(host);
+        gSurvival.food = 10.0f;
+        gInv.Held() = Stack(ID_BREAD, 2);
+        HandsResult r = HoldHands(ACT_USE, 2.0f);
+        CHECK(r.finished == ID_BREAD && gInv.Held().count == 1 && gSurvival.food > 10.0f, "holding the button eats");
+        gSurvival.food = 10.0f;
+        gInv.Held() = ItemStack();
+        gInv.offhand = Stack(ID_BREAD, 1);
+        bool offhand = false;
+        for (float t = 0.0f; t < 2.0f; t += 0.05f) {
+            r = t == 0.0f ? Hands({ ACT_USE }, { ACT_USE }) : Hands({}, { ACT_USE });
+            offhand = offhand || gGame.usingOffhand;
+        }
+        CHECK(offhand && gInv.offhand.Empty() && gInv.Held().Empty() && gSurvival.food > 10.0f, "with nothing in the main hand the off hand eats");
+        gSurvival.food = 20.0f;
+        gInv.Held() = Stack(ID_MILK_BUCKET);
+        r = HoldHands(ACT_USE, 2.0f);
+        CHECK(r.finished == ID_MILK_BUCKET && gInv.Held().id == ID_BUCKET, "milk is drunk even when full (the host is told)");
+
+        CombatStage(host);
+        gInv.Held() = Stack(ID_BOW);
+        gInv.slots[1] = Stack(ID_ARROW, 2);
+        HoldHands(ACT_USE, 1.2f);
+        CHECK(gProjectiles.empty() && gGame.bowDraw > 1.0f, "the bow is drawn while the button is held");
+        Hands({});
+        CHECK(gProjectiles.size() == 1, "and shoots when it is let go");
+    }
+
+    // game mode and camera keys
+    {
+        CombatStage(host);
+        gControls = Controls();
+        gControls.Set(ACT_GAME_MODE, true, true);
+        gControls.Set(ACT_PERSPECTIVE, true, true);
+        GameKeysTick();
+        CHECK(gGame.gameMode == MODE_CREATIVE && gGame.cameraMode == CAM_THIRD_BACK && gGame.messageTimer > 0.0f, "the game mode and the camera change");
+        GameKeysTick();
+        CHECK(gGame.gameMode == MODE_SURVIVAL && gGame.cameraMode == CAM_THIRD_FRONT, "back, and the camera goes round");
+        GameKeysTick();
+        CHECK(gGame.cameraMode == CAM_FIRST, "in Minecraft's order");
+        const int mode = gGame.gameMode;
+        gGame.screen = SCREEN_INVENTORY;
+        GameKeysTick();
+        CHECK(gGame.gameMode == mode && gGame.cameraMode == CAM_FIRST, "not while a screen is open");
+    }
+    gControls = Controls();
+    gGame = GameState();
+    MobsClear();
+    CombatClear();
+    ResetSurvival();
+}
+
+// a click in the middle of the slot at (gx, gy) of the open screen
+static void ClickAt(int gx, int gy, bool right = false, bool shift = false) { ScreenClick(gx + 8.0f, gy + 8.0f, !right, right, shift); }
+
+static void TestScreens() {
+    TestHost host;
+    SetHost(&host);
+    srand(4711);
+
+    // the inventory
+    {
+        CombatStage(host);
+        OpenScreen(SCREEN_INVENTORY);
+        BuildSlots();
+        CHECK(gSlots.size() == 46 && gWinW == 176 && gWinH == 166, "36 slots, 4 armour, the off hand, 2x2 crafting and its result (%d)",
+              (int)gSlots.size());
+        CHECK(SlotAt(16, 150) && SlotAt(16, 150)->st == &gInv.slots[0] && SlotAt(16, 92)->st == &gInv.slots[9] && !SlotAt(3, 3),
+              "where the slots are");
+        CHECK(OverWindow(1, 1) && !OverWindow(-1, 5) && !OverWindow(5, 170) && TabAt(5, -10) == -1, "the window; no tabs here");
+        CHECK(std::string(ScreenTitle()) == "\xC3\x9Cretim", "its title");
+
+        gInv.slots[0] = Stack(ID_DIRT, 10);
+        ClickAt(8, 142);
+        CHECK(gInv.cursor.id == ID_DIRT && gInv.cursor.count == 10 && gInv.slots[0].Empty() && gWorld.dirty, "a left click picks the stack up");
+        ClickAt(8 + 18, 142, true);
+        CHECK(gInv.slots[1].count == 1 && gInv.cursor.count == 9, "a right click puts one down");
+        ClickAt(8 + 18, 142, true);
+        CHECK(gInv.slots[1].count == 2 && gInv.cursor.count == 8, "and another one");
+        ClickAt(8 + 18, 142);
+        CHECK(gInv.slots[1].count == 10 && gInv.cursor.Empty(), "a left click puts all of it down");
+        ClickAt(8 + 18, 142, true);
+        CHECK(gInv.slots[1].count == 5 && gInv.cursor.count == 5, "a right click on a stack takes half");
+        gInv.slots[2] = Stack(ID_STONE, 3);
+        ClickAt(8 + 36, 142);
+        CHECK(gInv.slots[2].id == ID_DIRT && gInv.cursor.id == ID_STONE, "something else: they swap");
+        ClickAt(8 + 36, 142);
+        ClickAt(8 + 18, 142);
+        CHECK(gInv.slots[1].count == 10 && gInv.cursor.Empty() && gInv.slots[2].id == ID_STONE, "the same kind is put together");
+        gInv.cursor.Clear();
+
+        gInv.slots[1] = Stack(ID_DIRT, 10);
+        ClickAt(8 + 18, 142, false, true);
+        CHECK(gInv.slots[1].Empty() && gInv.slots[9].id == ID_DIRT && gInv.slots[9].count == 10, "shift moves from the hotbar up");
+        ClickAt(8, 84, false, true);
+        CHECK(gInv.slots[9].Empty() && gInv.CountOf(ID_DIRT) == 10 && gInv.slots[0].id == ID_DIRT, "and back down into the first free hotbar slot");
+        gInv.slots[3] = Stack(ID_IRON_HELMET);
+        ClickAt(8 + 54, 142, false, true);
+        CHECK(gInv.armor[0].id == ID_IRON_HELMET && gInv.slots[3].Empty() && Heard(SND_EQUIP_GENERIC) == 1, "armour goes on with shift");
+        gInv.cursor = Stack(ID_IRON_BOOTS);
+        ClickAt(8, 8);
+        CHECK(gInv.armor[0].id == ID_IRON_HELMET && gInv.cursor.id == ID_IRON_BOOTS, "boots do not fit the helmet slot");
+        ClickAt(8, 8 + 54);
+        CHECK(gInv.armor[3].id == ID_IRON_BOOTS && gInv.cursor.Empty(), "they fit the boots slot");
+
+        // crafting in the 2x2 grid
+        gInv.cursor = Stack(ID_OAK_PLANKS, 8);
+        for (int r = 0; r < 2; ++r)
+            for (int c = 0; c < 2; ++c)
+                ClickAt(98 + c * 18, 18 + r * 18, true);
+        BuildSlots();
+        CHECK(gInv.craft[0].count == 1 && gInv.craft[3].count == 1 && gInv.cursor.count == 4, "four planks in the grid");
+        ClickAt(154, 28);
+        CHECK(gInv.cursor.id == ID_OAK_PLANKS && gInv.cursor.count == 4, "the result cannot go onto planks");
+        gInv.cursor.Clear();
+        ClickAt(154, 28);
+        CHECK(gInv.cursor.id == ID_CRAFTING_TABLE && gInv.craft[0].Empty(), "a crafting table, the planks are used");
+        gInv.cursor.Clear();
+        for (int i = 0; i < 4; ++i)
+            gInv.craft[i] = Stack(ID_OAK_PLANKS, 3);
+        ClickAt(154, 28, false, true);
+        CHECK(gInv.CountOf(ID_CRAFTING_TABLE) == 3 && gInv.craft[0].Empty() && gInv.slots[8].id == ID_CRAFTING_TABLE && gInv.slots[8].count == 3,
+              "shift crafts as many as it can, into the hotbar from its right end");
+
+        // throwing out
+        gInv.cursor = Stack(ID_STONE, 5);
+        ScreenClick(-20.0f, 50.0f, false, true, false);
+        CHECK(gInv.cursor.count == 4 && CountDrops(ID_STONE) == 1, "a right click outside the window throws one out");
+        ScreenClick(-20.0f, 50.0f, true, false, false);
+        CHECK(gInv.cursor.Empty() && CountDrops(ID_STONE) == 5, "a left click all of it");
+        ScreenClick(40.0f, 3.0f, true, false, false);
+        CHECK(gInv.cursor.Empty(), "inside the window, between the slots, nothing happens");
+        CloseScreen();
+    }
+
+    // a chest and a furnace
+    {
+        CombatStage(host);
+        gWorld.SetRaw(2, 0, 10, MakeVox(ID_CHEST));
+        OpenScreen(SCREEN_CHEST, Int3{ 2, 0, 10 });
+        BuildSlots();
+        CHECK(gSlots.size() == 63 && gWinH == 167, "a chest has 27 slots more");
+        gInv.slots[0] = Stack(ID_DIRT, 64);
+        gInv.slots[1] = Stack(ID_IRON_HELMET);
+        ClickAt(8, 143, false, true);
+        ClickAt(26, 143, false, true);
+        CHECK(gWorld.chests[(Int3{ 2, 0, 10 })].slots[0].count == 64 && gWorld.chests[(Int3{ 2, 0, 10 })].slots[1].id == ID_IRON_HELMET &&
+                  gInv.armor[0].Empty(),
+              "shift puts things into the chest (armour too)");
+        ClickAt(8, 18, false, true);
+        CHECK(gInv.slots[8].count == 64 && gInv.slots[9].Empty(), "and takes them out into the hotbar, from its right end");
+        CloseScreen();
+
+        gWorld.SetRaw(3, 0, 10, MakeVox(ID_FURNACE));
+        OpenScreen(SCREEN_FURNACE, Int3{ 3, 0, 10 });
+        BuildSlots();
+        gInv = PlayerInventory();
+        gInv.slots[0] = Stack(ID_RAW_IRON, 3);
+        gInv.slots[1] = Stack(ID_COAL, 2);
+        gInv.slots[2] = Stack(ID_DIRT, 1);
+        ClickAt(8, 142, false, true);
+        ClickAt(26, 142, false, true);
+        ClickAt(44, 142, false, true);
+        FurnaceState* f = OpenFurnace();
+        CHECK(f->input.id == ID_RAW_IRON && f->fuel.id == ID_COAL && gInv.slots[2].Empty() && gInv.slots[9].id == ID_DIRT,
+              "shift sends ore to the input, coal to the fuel, the rest up");
+        gInv.cursor = Stack(ID_DIRT, 1);
+        ClickAt(56, 53);
+        CHECK(f->fuel.id == ID_COAL && gInv.cursor.id == ID_DIRT, "dirt does not burn");
+        gInv.cursor.Clear();
+        f->output = Stack(ID_IRON_INGOT, 2);
+        ClickAt(116, 35);
+        CHECK(gInv.cursor.id == ID_IRON_INGOT && gInv.cursor.count == 2 && f->output.Empty(), "the output is taken");
+        f->output = Stack(ID_IRON_INGOT, 1);
+        ClickAt(116, 35, true);
+        CHECK(gInv.cursor.count == 3, "onto what the cursor holds");
+        gInv.cursor.Clear();
+        f->output = Stack(ID_IRON_INGOT, 5);
+        ClickAt(116, 35, false, true);
+        CHECK(f->output.Empty() && gInv.slots[8].id == ID_IRON_INGOT && gInv.slots[8].count == 5, "shift sends the output to the hotbar's right end");
+        f->input = Stack(ID_RAW_IRON, 2);
+        ClickAt(56, 17, false, true);
+        CHECK(f->input.Empty() && gInv.CountOf(ID_RAW_IRON) == 2 && gInv.slots[10].id == ID_RAW_IRON, "and the input back to the inventory's top");
+        gInv.cursor = Stack(ID_DIRT, 1);
+        ClickAt(116, 35);
+        CHECK(f->output.Empty() && gInv.cursor.id == ID_DIRT, "nothing goes into the output");
+        gInv.cursor.Clear();
+        CloseScreen();
+    }
+
+    // creative
+    {
+        CombatStage(host);
+        gGame.gameMode = MODE_CREATIVE;
+        OpenScreen(SCREEN_CREATIVE);
+        gGame.creativeTab = 0;
+        BuildSlots();
+        CHECK(gWinW == 195 && gSlots.size() == 54 && SlotAt(17, 26)->kind == SK_PALETTE && !SlotAt(17, 26)->st->Empty(),
+              "the item tabs: a palette of 45 and the hotbar");
+        const uint16_t first = SlotAt(17, 26)->st->id;
+        ScreenClick(17, 26, true, false, false);
+        CHECK(gInv.cursor.id == first && gInv.cursor.count == MaxStack(first), "a left click takes a full stack");
+        ScreenClick(17, 26, true, false, false);
+        CHECK(gInv.cursor.Empty(), "clicking the palette again puts it away");
+        ScreenClick(17, 26, false, true, false);
+        CHECK(gInv.cursor.count == 1, "a right click takes one");
+        gInv.cursor.Clear();
+        ScreenClick(17, 26, true, false, true);
+        CHECK(gInv.CountOf(first) == MaxStack(first), "shift puts a stack into the inventory");
+        ScreenScroll(3);
+        BuildSlots();
+        CHECK(gGame.creativeScroll == std::min(3, std::max(0, PaletteRows() - 5)), "the wheel scrolls the palette (%d rows)", PaletteRows());
+        ScreenScroll(1000);
+        BuildSlots();
+        CHECK(gGame.creativeScroll == std::max(0, PaletteRows() - 5), "not past its end");
+        float x, y, w, h;
+        TabBox(2, x, y, w, h);
+        CHECK(TabAt(x + 3, y + 3) == 2 && x == 54.0f && y == -28.0f, "the tabs above the window");
+        TabBox(CAT_COUNT, x, y, w, h);
+        CHECK(x == 195.0f - 26.0f && y == 136.0f - 4.0f, "the inventory tab at the bottom right");
+        ScreenClick(x + 3, y + 3, true, false, false);
+        CHECK(gGame.creativeTab == CAT_COUNT && gGame.creativeScroll == 0 && Heard(SND_CLICK) == 1 && CreativeInventoryTab(), "a click picks a tab");
+        BuildSlots();
+        CHECK(gSlots.size() == 27 + 4 + 1 + 1 + 9 && std::string(ScreenTitle()) == kTabNames[CAT_COUNT], "there the whole inventory, and the trash");
+        gGame.creativeScroll = 0;
+        ScreenScroll(2);
+        CHECK(gGame.creativeScroll == 0, "the wheel does nothing there");
+        gInv.cursor = Stack(ID_DIRT, 5);
+        ClickAt(173, 112);
+        CHECK(gInv.cursor.Empty() && gInv.CountOf(first) == MaxStack(first), "the trash takes what the cursor holds");
+        ClickAt(173, 112, false, true);
+        CHECK(gInv.CountOf(first) == 0, "shift on the trash empties the inventory");
+        CloseScreen();
+    }
+    gGame = GameState();
+    ResetSurvival();
+}
+
+static bool SameRect(const GuiRect& a, const GuiRect& b) { return a.x == b.x && a.y == b.y && a.w == b.w && a.h == b.h; }
+
+static int CountSprites(const std::vector<HudPiece>& v, const GuiRect& r) {
+    int n = 0;
+    for (const HudPiece& p : v)
+        n += p.kind == HP_SPRITE && SameRect(p.src, r);
+    return n;
+}
+
+static const HudPiece* FindSprite(const std::vector<HudPiece>& v, const GuiRect& r) {
+    for (const HudPiece& p : v)
+        if (p.kind == HP_SPRITE && SameRect(p.src, r))
+            return &p;
+    return nullptr;
+}
+
+static const HudPiece* FindText(const std::vector<HudPiece>& v, const std::string& part) {
+    for (const HudPiece& p : v)
+        if (p.kind == HP_TEXT && p.text.find(part) != std::string::npos)
+            return &p;
+    return nullptr;
+}
+
+static int CountKind(const std::vector<HudPiece>& v, int kind) {
+    int n = 0;
+    for (const HudPiece& p : v)
+        n += p.kind == kind;
+    return n;
+}
+
+static void TestHud() {
+    TestHost host;
+    SetHost(&host);
+    srand(5150);
+    std::vector<HudPiece> v;
+    HudFacts f;
+    f.camera = Vec3(0.5f, 0.5f, 30.0f);
+
+    // hidden
+    {
+        CombatStage(host);
+        f.shown = false;
+        BuildHud(f, v);
+        CHECK(v.empty(), "with the HUD off nothing is drawn");
+        ShowMessage("hello");
+        BuildHud(f, v);
+        CHECK(v.size() == 1 && v[0].kind == HP_TEXT && v[0].text == "hello" && v[0].anchor == AT_TOP && v[0].y == 40.0f && v[0].align == 1,
+              "but messages are");
+        f.shown = true;
+    }
+
+    // the hotbar and the stats
+    {
+        CombatStage(host);
+        gInv.selected = 2;
+        gInv.slots[0] = Stack(ID_DIRT, 3);
+        f.health = 0.55f;
+        v.clear();
+        BuildHud(f, v);
+        const HudPiece* bar = FindSprite(v, GUI_HOTBAR);
+        CHECK(bar && bar->anchor == AT_BOTTOM && bar->x == -91.0f && bar->y == -22.0f, "the hotbar at the bottom");
+        const HudPiece* sel = FindSprite(v, GUI_SELECTION);
+        CHECK(sel && sel->x == -91.0f + 40.0f - 1.0f && sel->y == -23.0f, "the selection on the third slot");
+        CHECK(CountKind(v, HP_STACK) == 9 && v[0].kind != HP_STACK, "nine slots");
+        CHECK(CountSprites(v, GUI_HEART_CONTAINER) == 10 && CountSprites(v, GUI_HEART_FULL) == 5 && CountSprites(v, GUI_HEART_HALF) == 1,
+              "55%% health: five and a half hearts");
+        CHECK(FindSprite(v, GUI_HEART_FULL)->y == -39.0f && CountSprites(v, GUI_ARMOR_EMPTY) == 0, "steady, no armour row");
+        CHECK(CountSprites(v, GUI_FOOD_FULL) == 10 && FindSprite(v, GUI_FOOD_FULL)->x == -91.0f + 173.0f, "full food, from the right");
+        CHECK(CountSprites(v, GUI_XP_BG) == 1 && CountSprites(v, GUI_AIR) == 0 && !FindText(v, "0"), "the experience bar, empty; no air");
+        CHECK(FindSprite(v, GUI_CROSSHAIR) && FindSprite(v, GUI_CROSSHAIR)->invert && FindSprite(v, GUI_CROSSHAIR)->anchor == AT_CENTRE, "the crosshair");
+
+        gSurvival.xpProgress = 0.5f;
+        gSurvival.xpLevel = 7;
+        gSurvival.food = 7.0f;
+        gSurvival.air = kMaxAir * 0.5f;
+        gInv.armor[0] = Stack(ID_IRON_HELMET);
+        gInv.offhand = Stack(ID_BREAD);
+        AddEffect(EFFECT_POISON, 30.0f, 0);
+        AddEffect(EFFECT_ABSORPTION, 30.0f, 1);
+        gGame.selectedNameTimer = 0.5f;
+        gInv.selected = 0;
+        v.clear();
+        BuildHud(f, v);
+        GuiRect xp = GUI_XP_PROGRESS;
+        xp.w = 91;
+        CHECK(CountSprites(v, xp) == 1, "half the experience bar");
+        const HudPiece* lvl = FindText(v, "7");
+        CHECK(lvl && lvl->outline && !lvl->shadow && lvl->y == -35.0f, "the level in green with a black outline");
+        CHECK(CountSprites(v, GUI_HEART_POISONED_FULL) == 5 && CountSprites(v, GUI_HEART_FULL) == 0, "poison turns the hearts green");
+        CHECK(CountSprites(v, GUI_HEART_ABSORBING_FULL) == 4 && FindSprite(v, GUI_HEART_ABSORBING_FULL)->y == -49.0f,
+              "absorption: four yellow hearts above (%.1f points)", gSurvival.absorption);
+        CHECK(CountSprites(v, GUI_ARMOR_FULL) == 1 && CountSprites(v, GUI_ARMOR_EMPTY) == 9 && FindSprite(v, GUI_ARMOR_FULL)->y == -59.0f,
+              "an iron helmet: one armour point, the row moved up");
+        CHECK(CountSprites(v, GUI_FOOD_FULL) == 3 && CountSprites(v, GUI_FOOD_HALF) == 1 && CountSprites(v, GUI_FOOD_EMPTY) == 10, "7 food");
+        CHECK(CountSprites(v, GUI_AIR) + CountSprites(v, GUI_AIR_BURSTING) == 5 && FindSprite(v, GUI_AIR)->y == -49.0f, "half the air: five bubbles");
+        CHECK(FindSprite(v, GUI_OFFHAND) && FindSprite(v, GUI_OFFHAND)->x == -120.0f && CountKind(v, HP_STACK) == 10, "the off hand slot");
+        const HudPiece* name = FindText(v, ItemName(ID_DIRT));
+        CHECK(name && name->y == -59.0f && name->align == 1 && (name->color >> 24) == 127, "the held item's name fades");
+        const HudPiece* ebg = FindSprite(v, GUI_EFFECT_BG);
+        CHECK(CountSprites(v, GUI_EFFECT_BG) == 2 && ebg->anchor == AT_TOP_RIGHT && ebg->x == -25.0f && ebg->y == 1.0f, "two effects, top right");
+        const HudPiece* poison = FindText(v, kEffectNames[EFFECT_POISON]);
+        CHECK(poison && poison->align == 2 && poison->y == 27.0f + 3.0f && FindText(v, "0:30") && FindText(v, "0:30")->y == 1.0f + 13.0f,
+              "their names and time left");
+
+        ClearEffects();
+        gInv.armor[0] = ItemStack();
+        f.hostAbsorb = 10.0f;
+        f.health = 0.15f;
+        gSurvival.food = 4.0f;
+        gSurvival.saturation = 0.0f;
+        AddEffect(EFFECT_HUNGER, 5.0f, 0);
+        bool heartsShake = false, foodShakes = false;
+        for (int i = 0; i < 10; ++i) {
+            v.clear();
+            BuildHud(f, v);
+            for (const HudPiece& p : v) {
+                if (p.kind == HP_SPRITE && SameRect(p.src, GUI_HEART_CONTAINER) && p.y != -39.0f)
+                    heartsShake = true;
+                if (p.kind == HP_SPRITE && SameRect(p.src, GUI_FOOD_EMPTY_HUNGER) && p.y != -39.0f)
+                    foodShakes = true;
+            }
+        }
+        CHECK(heartsShake && foodShakes, "low health and an empty stomach shake");
+        CHECK(CountSprites(v, GUI_ARMOR_FULL) == 0 && CountSprites(v, GUI_HEART_ABSORBING_FULL) == 5 && CountSprites(v, GUI_FOOD_HALF_HUNGER) == 0 &&
+                  CountSprites(v, GUI_FOOD_FULL_HUNGER) == 2,
+              "the host's body armour shows as yellow hearts, not armour; hunger turns the food green");
+        ClearEffects();
+
+        gGame.gameMode = MODE_CREATIVE;
+        v.clear();
+        BuildHud(f, v);
+        CHECK(CountSprites(v, GUI_HEART_CONTAINER) == 0 && CountSprites(v, GUI_XP_BG) == 0 && FindText(v, ItemName(ID_DIRT))->y == -45.0f,
+              "creative: no hearts, no experience");
+        gGame.cameraMode = CAM_THIRD_FRONT;
+        v.clear();
+        BuildHud(f, v);
+        CHECK(!FindSprite(v, GUI_CROSSHAIR), "no crosshair looking at the player's face");
+        gGame.cameraMode = CAM_FIRST;
+        gSurvival.burn = 5.0f;
+        v.clear();
+        BuildHud(f, v);
+        CHECK(CountKind(v, HP_OVERLAY) == 2 && v[0].kind == HP_OVERLAY && v[0].u0 > v[0].u1 && v[0].y > 0.1f && v[0].y + v[0].h > 1.0f,
+              "burning in first person: two flames rise from the bottom of the screen");
+        gGame.cameraMode = CAM_THIRD_BACK;
+        v.clear();
+        BuildHud(f, v);
+        CHECK(CountKind(v, HP_OVERLAY) == 0, "not seen from behind");
+        gGame.cameraMode = CAM_FIRST;
+        gSurvival.burn = 0.0f;
+        gWorld.SetRaw(0, 0, 30, MakeVox(ID_WATER));
+        v.clear();
+        BuildHud(f, v);
+        CHECK(v[0].kind == HP_FILL && v[0].w == 0.0f && (v[0].color & 0xFFFFFF) == 0x2A50C8, "inside water the screen is blue");
+        gWorld.SetRaw(0, 0, 30, MakeVox(ID_AIR));
+    }
+
+    // an open screen
+    {
+        CombatStage(host);
+        f = HudFacts();
+        f.camera = Vec3(0.5f, 0.5f, 30.0f);
+        gInv.slots[0] = Stack(ID_DIRT, 3);
+        OpenScreen(SCREEN_INVENTORY);
+        BuildSlots();
+        f.mouseX = 8 + 4;
+        f.mouseY = 142 + 4;
+        v.clear();
+        BuildHud(f, v);
+        CHECK(!FindSprite(v, GUI_CROSSHAIR) && FindSprite(v, GUI_WIN_INVENTORY) && FindSprite(v, GUI_WIN_INVENTORY)->anchor == AT_WINDOW,
+              "the inventory window, no crosshair");
+        CHECK(CountKind(v, HP_PLAYER) == 1 && FindText(v, ScreenTitle()) && FindText(v, ScreenTitle())->x == 97.0f, "the player's doll and the title");
+        CHECK(CountSprites(v, GUI_SLOT_HELMET) == 1 && CountSprites(v, GUI_SLOT_SHIELD) == 1, "empty armour and off hand slots show their shapes");
+        bool hover = false;
+        for (const HudPiece& p : v)
+            hover = hover || (p.kind == HP_FILL && p.anchor == AT_WINDOW && p.x == 8.0f && p.y == 142.0f && p.w == 16.0f);
+        CHECK(hover && CountKind(v, HP_TOOLTIP) == 1 && v[v.size() - 1].text == ItemName(ID_DIRT), "the slot under the mouse lights up, with a tooltip");
+        gInv.cursor = Stack(ID_STONE, 2);
+        v.clear();
+        BuildHud(f, v);
+        CHECK(CountKind(v, HP_TOOLTIP) == 0 && v.back().kind == HP_STACK && v.back().anchor == AT_CURSOR && v.back().x == -8.0f,
+              "what the cursor holds hangs on the mouse");
+        gInv.cursor.Clear();
+        CloseScreen();
+
+        gWorld.SetRaw(2, 0, 10, MakeVox(ID_BLAST_FURNACE));
+        OpenScreen(SCREEN_FURNACE, Int3{ 2, 0, 10 });
+        FurnaceState* fs = OpenFurnace();
+        fs->burnTime = 50;
+        fs->burnTimeTotal = 100;
+        fs->input = Stack(ID_RAW_IRON);
+        fs->cookTime = 50;
+        BuildSlots();
+        v.clear();
+        BuildHud(f, v);
+        CHECK(FindSprite(v, GUI_WIN_BLAST) && FindText(v, "Envanter") && FindText(v, "Envanter")->y == 72.0f, "a blast furnace has its own window");
+        const HudPiece* lit = nullptr;
+        const HudPiece* arrow = nullptr;
+        for (const HudPiece& p : v) {
+            if (p.kind == HP_SPRITE && p.src.x == GUI_LIT.x)
+                lit = &p;
+            if (p.kind == HP_SPRITE && p.src.x == GUI_BURN.x && p.src.y == GUI_BURN.y)
+                arrow = &p;
+        }
+        CHECK(lit && lit->src.h == 7 && lit->y == 43.0f && arrow && arrow->src.w == 12, "half the fire, half the arrow (blast furnace: 100 ticks)");
+        CloseScreen();
+
+        gGame.gameMode = MODE_CREATIVE;
+        OpenScreen(SCREEN_CREATIVE);
+        gGame.creativeTab = 0;
+        BuildSlots();
+        f.mouseX = 5;
+        f.mouseY = -20;
+        v.clear();
+        BuildHud(f, v);
+        CHECK(CountKind(v, HP_ICON) == CAT_COUNT + 1 && FindSprite(v, GUI_TAB_TOP_SELECTED_1) && CountSprites(v, GUI_TAB_TOP_UNSELECTED_1) == 0,
+              "creative: every tab with its icon, the first one picked");
+        CHECK(CountSprites(v, GUI_SCROLLER) == 1 && FindSprite(v, GUI_SCROLLER)->y == 18.0f, "the scroller at the top");
+        CHECK(CountKind(v, HP_TOOLTIP) == 1 && v.back().text == kTabNames[0], "the tab under the mouse says its name");
+        CloseScreen();
+    }
+
+    // you died
+    {
+        CombatStage(host);
+        gGame.deathTime = 0.5f;
+        gGame.deathCause = STR_DEATH_DROWN;
+        gSurvival.xpTotal = 42;
+        f = HudFacts();
+        f.camera = Vec3(0.5f, 0.5f, 30.0f);
+        f.playerName = "CJ";
+        v.clear();
+        BuildHud(f, v);
+        const HudPiece* veil = nullptr;
+        for (const HudPiece& p : v)
+            if (p.kind == HP_GRADIENT)
+                veil = &p;
+        CHECK(veil && veil->scale == 0.5f && veil->color == 0x60500000u && veil->color2 == 0xA0803030u, "a red veil fades in");
+        const HudPiece* title = FindText(v, kStr[STR_YOU_DIED]);
+        CHECK(title && title->scale == 2.0f && title->y == 60.0f, "\"You died!\" twice as big");
+        CHECK(FindText(v, "CJ") && FindText(v, "CJ")->y == 85.0f, "the cause, with the player's name");
+        const HudPiece* score = FindText(v, std::string(kStr[STR_SCORE]).substr(0, 3));
+        CHECK(score && score->text2 == "42" && score->text.find("%s") == std::string::npos, "the score");
+        CHECK(!FindText(v, kStr[STR_RESPAWN]), "no button yet");
+        gGame.deathTime = 1.5f;
+        v.clear();
+        BuildHud(f, v);
+        const HudPiece* button = FindSprite(v, MENU_BUTTON_HI);
+        CHECK(button && button->texture == HT_MENU && button->anchor == AT_QUARTER && FindText(v, kStr[STR_RESPAWN]), "after a second the button");
+    }
+    gGame = GameState();
+    ResetSurvival();
+}
+
+// the mesh of the chunk around the origin, in a world with just these blocks
+static BlockMesh MeshOf(std::initializer_list<std::pair<Int3, Voxel>> blocks) {
+    gWorld.Clear();
+    for (const auto& b : blocks)
+        gWorld.SetRaw(b.first.x, b.first.y, b.first.z, b.second);
+    BlockMesh m;
+    MeshChunk(*gWorld.FindChunk({ 0, 0, 0 }), m);
+    return m;
+}
+
+static void TestBlockMesh() {
+    TestHost host;
+    SetHost(&host);
+
+    {
+        BlockMesh m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_STONE) } });
+        CHECK(m.verts.size() == 24 && m.shade.size() == 24 && m.emissive.size() == 24 && m.tverts.empty() && m.nverts.empty(),
+              "a lone stone block: six faces");
+        int top = 0, bottom = 0, side = 0;
+        for (size_t i = 0; i < m.verts.size(); ++i) {
+            if (m.verts[i].n == (Int3{ 0, 0, 1 }))
+                top += m.shade[i] == 255;
+            if (m.verts[i].n == (Int3{ 0, 0, -1 }))
+                bottom += m.shade[i] == 127;
+            if (m.verts[i].n == (Int3{ 1, 0, 0 }))
+                side += m.shade[i] == 153;
+        }
+        CHECK(top == 4 && bottom == 4 && side == 4, "Minecraft's light per face: top 1, east 0.6, bottom 0.5");
+        const TileUV uv = AtlasTileUV(BlockFaceTile(ID_STONE, FACE_TOP, 0));
+        bool inTile = true;
+        for (const MeshVertex& v : m.verts)
+            inTile = inTile && v.u >= uv.u0 - 1e-6f && v.u <= uv.u1 + 1e-6f && v.v >= uv.v0 - 1e-6f && v.v <= uv.v1 + 1e-6f;
+        CHECK(inTile && uv.u1 > uv.u0 && uv.u1 - uv.u0 < 16.0f / ATLAS_SIZE, "its texture: one tile of the atlas");
+
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_STONE) }, { { 4, 3, 3 }, MakeVox(ID_STONE) } });
+        CHECK(m.verts.size() == 40, "two stones side by side: the faces between them are hidden");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_STONE) }, { { 4, 3, 4 }, MakeVox(ID_STONE) } });
+        int dark = 0;
+        for (size_t i = 0; i < m.verts.size(); ++i)
+            if (m.verts[i].n == (Int3{ 0, 0, 1 }) && m.verts[i].z == 4.0f && m.verts[i].x == 4.0f)
+                dark += m.shade[i] < 255;
+        CHECK(dark == 2, "a block above the edge darkens the top's two corners there (ambient occlusion)");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_GLASS) }, { { 4, 3, 3 }, MakeVox(ID_GLASS) } });
+        CHECK(m.verts.size() == 40, "glass next to glass shows no face between");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_GLASS) }, { { 4, 3, 3 }, MakeVox(ID_STONE) } });
+        CHECK(m.verts.size() == 44, "glass does not hide the stone behind it");
+    }
+
+    {
+        BlockMesh m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_POPPY) } });
+        CHECK(m.verts.size() == 8 && m.shade[0] == 230, "a flower: two crossed sheets");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_WATER) } });
+        CHECK(m.verts.empty() && m.tverts.size() == 24 && m.tanim.size() == 24, "water is translucent");
+        bool still = false, flow = false;
+        for (uint8_t a : m.tanim) {
+            still = still || a == ANIM_WATER_STILL;
+            flow = flow || a == ANIM_WATER_FLOW;
+        }
+        float topZ = 0.0f;
+        for (const MeshVertex& v : m.tverts)
+            if (v.n == (Int3{ 0, 0, 1 }))
+                topZ = v.z;
+        CHECK(still && flow && topZ > 3.5f && topZ < 4.0f, "still on top (a little lower than a block, %.2f), flowing on the sides", topZ);
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_WATER) }, { { 3, 3, 4 }, MakeVox(ID_WATER) } });
+        int tops = 0;
+        for (const MeshVertex& v : m.tverts)
+            tops += v.n == (Int3{ 0, 0, 1 });
+        CHECK(tops == 4, "water under water has no surface");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_LAVA) } });
+        CHECK(m.verts.size() == 24 && m.emissive[0] == 1 && m.anim[0] == ANIM_LAVA_STILL, "lava glows");
+        m = MeshOf({ { { 3, 3, 2 }, MakeVox(ID_STONE) }, { { 3, 3, 3 }, MakeVox(ID_FIRE) } });
+        int fire = 0;
+        for (uint8_t a : m.anim)
+            fire += a == ANIM_FIRE_0 || a == ANIM_FIRE_1;
+        CHECK(fire == 16, "fire on the floor: four leaning flames");
+    }
+
+    {
+        host.ownGround = false;
+        BlockMesh m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_DIRT, META_NATURAL) } });
+        CHECK(m.verts.size() == 24 && m.nverts.empty(), "ground of ours is drawn as usual");
+        host.ownGround = true;
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_DIRT, META_NATURAL) } });
+        CHECK(m.verts.empty() && m.nverts.size() == 24 && m.nshade[0] < 128, "the host's dug ground goes apart, darker deep down");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_DIRT) } });
+        CHECK(m.verts.size() == 24, "a placed block is never the host's");
+        host.ownGround = false;
+    }
+    gWorld.Clear();
+}
+
+// counts the models' quads and where they go
+struct RecordSink : ModelSink {
+    int tex = -1, quads[2] = { 0, 0 };
+    Vec3 lo, hi;
+    uint32_t color = 0;
+    void Reset() {
+        tex = -1;
+        quads[0] = quads[1] = 0;
+        lo = Vec3(1e9f, 1e9f, 1e9f);
+        hi = Vec3(-1e9f, -1e9f, -1e9f);
+    }
+    void Texture(int t) override { tex = t; }
+    void Quad(const Vec3* p, const float*, const float*, uint32_t c) override {
+        ++quads[tex == MT_ATLAS ? 1 : 0];
+        color = c;
+        for (int k = 0; k < 4; ++k) {
+            lo = Vec3(std::min(lo.x, p[k].x), std::min(lo.y, p[k].y), std::min(lo.z, p[k].z));
+            hi = Vec3(std::max(hi.x, p[k].x), std::max(hi.y, p[k].y), std::max(hi.z, p[k].z));
+        }
+    }
+    // every tile is an 8x8 square in the middle
+    bool Opaque(int, int px, int py) override { return px >= 4 && px < 12 && py >= 4 && py < 12; }
+};
+
+static void TestModels() {
+    RecordSink sink;
+    SetModelSink(&sink);
+    const Pose stand = EntityPose(Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0, 1), Vec3(0, 1, 0), 1.0f);
+
+    sink.Reset();
+    DrawMob(MOB_COW, stand, MobAnim(), 1.0f, 1.0f, 1.0f, 1.0f);
+    const float cowH = sink.hi.z;
+    CHECK(sink.quads[0] > 30 && sink.quads[1] == 0 && sink.lo.z > -0.01f && cowH > 1.2f && cowH < 1.6f,
+          "a cow: %d quads of entity.png, %.2f m high", sink.quads[0], cowH);
+    CHECK(sink.hi.y - sink.lo.y > 1.0f && sink.hi.x - sink.lo.x < 1.0f, "longer than it is wide");
+    sink.Reset();
+    DrawMob(MOB_CHICKEN, stand, MobAnim(), 1.0f, 1.0f, 1.0f, 1.0f);
+    CHECK(sink.quads[0] > 20 && sink.hi.z < cowH * 0.75f, "a chicken is small (%.2f m)", sink.hi.z);
+    sink.Reset();
+    DrawMob(MOB_COW, stand, MobAnim(), 1.0f, 1.0f, 0.45f, 0.45f);
+    CHECK(((sink.color >> 8) & 255) * 2 < ((sink.color >> 16) & 255) + 2 && (sink.color & 255) * 2 < ((sink.color >> 16) & 255) + 2,
+          "a hurt animal flashes red");
+
+    sink.Reset();
+    DrawMob(MOB_CREEPER, stand, MobAnim(), 1.0f, 1.0f, 1.0f, 1.0f);
+    const float creeperW = sink.hi.x - sink.lo.x;
+    CHECK(sink.quads[0] == 36 && sink.hi.z > 1.6f && sink.hi.z < 1.75f && sink.lo.z > -0.01f, "a creeper: six cubes, 26 px high (%.2f)", sink.hi.z);
+    MobAnim swelling;
+    swelling.swell = 0.95f;
+    sink.Reset();
+    DrawMob(MOB_CREEPER, stand, swelling, 1.0f, 1.0f, 1.0f, 1.0f);
+    CHECK(sink.hi.x - sink.lo.x > creeperW * 1.25f && sink.lo.z > -0.01f, "about to blow up it is a third wider, still on its feet");
+
+    sink.Reset();
+    HumanoidAnim a;
+    PlayerAnimInput in;
+    ComputePlayerAnim(a, in);
+    DrawPlayerModel(stand, a, ModelStyle());
+    CHECK(sink.quads[0] == 72 && sink.hi.z > 1.95f && sink.hi.z < 2.1f, "Steve: 12 cubes with their outer layer, 32 px = 2 blocks (%.2f)", sink.hi.z);
+    CHECK(a.rArm.rx == 0.0f && a.lLeg.rx == 0.0f, "standing still");
+    in.limbSwing = 1.0f;
+    in.limbAmount = 1.0f;
+    ComputePlayerAnim(a, in);
+    CHECK(a.rArm.rx != 0.0f && Near(a.rArm.rx, -a.lArm.rx, 1e-3f) && Near(a.rLeg.rx, -a.lLeg.rx, 1e-3f) && a.rArm.rx * a.rLeg.rx < 0.0f,
+          "walking swings arms and legs against each other");
+    in = PlayerAnimInput();
+    in.crouch = true;
+    ComputePlayerAnim(a, in);
+    CHECK(a.body.rx > 0.4f, "sneaking bends the body forward");
+    in = PlayerAnimInput();
+    in.attack = 0.5f;
+    HumanoidAnim still;
+    ComputePlayerAnim(still, PlayerAnimInput());
+    ComputePlayerAnim(a, in);
+    CHECK(a.rArm.rx < still.rArm.rx - 0.5f, "a swing raises the right arm");
+
+    sink.Reset();
+    Pose item;
+    DrawItemModel(item, ID_STONE, 1.0f);
+    CHECK(sink.quads[1] == 6 && sink.quads[0] == 0, "a block in the hand: a cube from the atlas");
+    sink.Reset();
+    DrawItemModel(item, ID_STICK, 1.0f);
+    CHECK(sink.quads[1] == 2 + 32, "a flat item: front, back and one edge per border pixel (%d)", sink.quads[1]);
+    SetModelSink(nullptr);
+}
+
+static void RunAnim(float seconds, const PlayerMotion& m) {
+    for (float t = 0.0f; t < seconds; t += 0.05f)
+        PlayerAnimTick(0.05f, &m);
+}
+
+static void TestPlayerAnim() {
+    TestHost host;
+    SetHost(&host);
+    srand(31337);
+
+    // the body's clocks
+    {
+        CombatStage(host);
+        PlayerAnimTick(0.5f, nullptr);
+        CHECK(Near(gGame.age, 0.5f), "without a player only the clock runs");
+        PlayerMotion m;
+        m.velocity = Vec3(4.3f, 0, 0);
+        RunAnim(1.0f, m);
+        CHECK(gGame.walkAmount > 0.6f && gGame.walkPhase > 5.0f && gGame.bob > 0.05f && gGame.walkDist > 2.0f, "walking swings the legs and bobs the view");
+        m.standing = false;
+        RunAnim(1.0f, m);
+        CHECK(gGame.bob < 0.01f, "in the air the view stops bobbing");
+        m.onFoot = false;
+        RunAnim(1.0f, m);
+        CHECK(gGame.walkAmount < 0.01f, "in a vehicle the legs rest");
+        m = PlayerMotion();
+        m.swimming = true;
+        m.velocity = Vec3(2.0f, 0, 0);
+        RunAnim(0.5f, m);
+        CHECK(SwimPose() > 0.99f, "swimming lies down");
+        m.velocity = Vec3();
+        RunAnim(0.5f, m);
+        CHECK(SwimPose() < 0.01f, "floating still stands up again");
+        StartSwing();
+        RunAnim(0.1f, PlayerMotion());
+        CHECK(gGame.swing > 0.2f && gGame.swing < 0.5f, "a swing takes 0.3 s");
+        RunAnim(0.3f, PlayerMotion());
+        CHECK(gGame.swing < 0.0f, "and ends");
+        gGame.sprinting = true;
+        RunAnim(1.0f, PlayerMotion());
+        CHECK(Near(gGame.fovMod, 1.15f, 0.01f), "sprinting widens the view");
+        gGame.sprinting = false;
+
+        gInv.Held() = Stack(ID_DIRT);
+        gGame.handItem = ID_DIRT;
+        gGame.handHeight = 1.0f;
+        gGame.attackTimer = 10.0f;
+        gInv.Held() = Stack(ID_STONE);
+        RunAnim(0.1f, PlayerMotion());
+        CHECK(gGame.handHeight < 0.5f && gGame.handItem == ID_DIRT, "a new item: the hand goes down first");
+        RunAnim(0.5f, PlayerMotion());
+        CHECK(gGame.handItem == ID_STONE && gGame.handHeight > 0.9f, "and comes up with the new one");
+        m = PlayerMotion();
+        m.alive = false;
+        RunAnim(0.5f, m);
+        CHECK(gGame.handItem == 0, "the dead hold nothing");
+    }
+
+    // what the items look like while used
+    {
+        CombatStage(host);
+        CHECK(HeldItemTile(ID_BOW) == -1 && HeldItemTile(ID_STONE) == -1, "nothing special");
+        gGame.bowDraw = 0.3f;
+        CHECK(HeldItemTile(ID_BOW) == TILE_BOW_PULLING_0, "a bow being drawn");
+        gGame.bowDraw = 1.0f;
+        CHECK(HeldItemTile(ID_BOW) == TILE_BOW_PULLING_2, "fully drawn");
+        gInv.Held() = Stack(ID_CROSSBOW);
+        gGame.crossbowSlot = gInv.selected;
+        gGame.crossbowRocket = true;
+        CHECK(HeldItemTile(ID_CROSSBOW) == TILE_CROSSBOW_FIREWORK, "a crossbow loaded with a firework");
+        gInv.Held() = Stack(ID_FISHING_ROD);
+        UseHeldItem();
+        CHECK(HeldItemTile(ID_FISHING_ROD) == TILE_FISHING_ROD_CAST, "a cast rod");
+        FishingClear();
+    }
+
+    // the third person look and the first person hands
+    {
+        CombatStage(host);
+        gInv.Held() = Stack(ID_DIAMOND_SWORD);
+        gInv.offhand = Stack(ID_BREAD);
+        gInv.armor[ARMOR_CHEST] = Stack(ID_ELYTRA);
+        gInv.armor[0] = Stack(ID_IRON_HELMET);
+        gGame.lookDir = Vec3(1, 0, 0);
+        gGame.hurtTimer = 0.3f;
+        PlayerDrawInput in = PlayerLook(Vec3(0, -1, 0), Vec3(1, 0, 0), false, true, false, 0.8f);
+        CHECK(in.held == ID_DIAMOND_SWORD && in.offHeld == ID_BREAD && in.anim.holding && in.anim.holdingLeft && in.elytra && in.armor[0] == ID_IRON_HELMET,
+              "the items, the elytra and the armour");
+        CHECK(in.anim.crouch && in.g < 0.5f && in.r == 1.0f && in.light == 0.8f && Near(in.anim.headYaw, 0.0f) && Near(in.anim.headPitch, 0.0f),
+              "sneaking, hurt, looking straight ahead");
+        gGame.lookDir = Vec3(0, -1, 0);
+        in = PlayerLook(Vec3(0, -1, 0), Vec3(1, 0, 0), false, false, false, 1.0f);
+        CHECK(Near(in.anim.headYaw, 1.3f), "the head turns, but not all the way (%.2f)", in.anim.headYaw);
+        in = PlayerLook(Vec3(0, -1, 0), Vec3(1, 0, 0), false, false, true, 1.0f);
+        CHECK(in.held == 0 && in.anim.limbAmount == 0.0f, "the dead hold nothing");
+        gSurvival.eatTimer = 0.8f;
+        in = PlayerLook(Vec3(0, -1, 0), Vec3(1, 0, 0), false, false, false, 1.0f);
+        CHECK(in.anim.armPose == ARM_EAT && Near(in.anim.useTicks, 16.0f), "eating raises the arm");
+
+        gGame.handItem = ID_DIAMOND_SWORD;
+        gGame.handHeight = 1.0f;
+        FirstPersonInput h = HandInput(false);
+        CHECK(h.item == ID_DIAMOND_SWORD && !h.leftHand && Near(h.eat, 0.5f) && h.lowered == 0.0f, "the main hand eats half way");
+        gGame.offItem = ID_BREAD;
+        gGame.usingOffhand = true;
+        h = HandInput(true);
+        gGame.offHeight = 0.25f;
+        h = HandInput(true);
+        CHECK(h.leftHand && h.item == ID_BREAD && Near(h.eat, 0.5f) && Near(h.lowered, 0.75f), "the off hand eats too, while coming up");
+        gGame.usingOffhand = false;
+        gSurvival.eatTimer = 0.0f;
+    }
+
+    // the dead tip over
+    {
+        Vec3 r(1, 0, 0), u(0, 0, 1);
+        DeathTilt(0.0f, r, u);
+        CHECK(Near(u.z, 1.0f), "at first upright");
+        DeathTilt(1.0f, r, u);
+        CHECK(Near(u.x, -1.0f, 1e-3f) && Near(r.z, 1.0f, 1e-3f), "after a second on the side");
+    }
+
+    // lava and fire near the player
+    {
+        CombatStage(host);
+        gWorld.SetRaw(3, 0, 10, MakeVox(ID_LAVA));
+        gWorld.SetRaw(-3, 0, 10, MakeVox(ID_FIRE));
+        gWorld.ticking.insert(Int3{ 3, 0, 10 });
+        gWorld.ticking.insert(Int3{ -3, 0, 10 });
+        HeatTick(0.05f, Vec3(0.5f, 0.5f, 10.0f));
+        CHECK(HotBlocks().size() == 2 && HotBlocks()[0].d2 <= HotBlocks()[1].d2, "the lava and the fire, nearest first");
+        CHECK(HotBlockAt(Vec3(3.5f, 0.5f, 10.5f)) == ID_LAVA && HotBlockAt(Vec3(-2.5f, 0.5f, 10.2f)) == ID_FIRE &&
+                  HotBlockAt(Vec3(0.5f, 0.5f, 10.5f)) == ID_AIR,
+              "what burns where");
+        gParticles.clear();
+        for (int i = 0; i < 400; ++i)
+            HeatTick(0.05f, Vec3(0.5f, 0.5f, 10.0f));
+        CHECK(CountParticles(TILE_P_GENERIC_0) > 20 && CountParticles(TILE_P_LAVA) >= 1 && Heard(SND_FIRE_AMBIENT) > 2,
+              "fire smokes and crackles, lava pops (%d drops)", CountParticles(TILE_P_LAVA));
+        BlockRulesClear();
+        CHECK(HotBlocks().empty(), "a new world forgets them");
+        gWorld.ticking.clear();
+    }
+
+    // bubbles
+    {
+        CombatStage(host);
+        gGame.eyePos = Vec3(0.5f, 0.5f, 11.6f);
+        BreathEffects(0.05f, false, true);
+        CHECK(CountParticles(TILE_P_BUBBLE) == 8 && gGame.deathCause == STR_DEATH_DROWN, "drowning: a burst of bubbles");
+        gParticles.clear();
+        for (int i = 0; i < 40; ++i)
+            BreathEffects(0.05f, true, false);
+        CHECK(CountParticles(TILE_P_BUBBLE) >= 2 && CountParticles(TILE_P_BUBBLE) <= 6, "under water a few now and then (%d in 2 s)",
+              CountParticles(TILE_P_BUBBLE));
+    }
+
+    // items in the GUI
+    {
+        IconQuad q[kMaxIconQuads];
+        CHECK(ItemIcon(ID_STONE, q) == 3 && q[0].color == 0xFFFFFFFF && q[1].color == 0xFFCCCCCC && q[2].color == 0xFF999999, "a block: a little cube");
+        CHECK(ItemIcon(ID_POPPY, q) == 1 && q[0].x[1] == 16.0f, "a flower: flat");
+        CHECK(ItemIcon(ID_STICK, q) == 1 && q[0].tile == Item(ID_STICK).tile, "an item: its tile");
+        CHECK(ItemIcon(0, q) == 0, "nothing: nothing");
+        int w = 0;
+        uint32_t col = 0;
+        CHECK(!DurabilityBar(Stack(ID_DIAMOND_SWORD), &w, &col) && !DurabilityBar(Stack(ID_DIRT), &w, &col), "new tools and blocks have no bar");
+        ItemStack worn = Stack(ID_DIAMOND_SWORD);
+        worn.damage = (uint16_t)(Item(ID_DIAMOND_SWORD).durability / 2);
+        CHECK(DurabilityBar(worn, &w, &col) && (w == 6 || w == 7) && ((col >> 16) & 255) > 200 && ((col >> 8) & 255) > 200, "half worn: half a yellow bar");
+        worn.damage = (uint16_t)(Item(ID_DIAMOND_SWORD).durability - 1);
+        CHECK(DurabilityBar(worn, &w, &col) && w == 0 && ((col >> 16) & 255) == 255 && ((col >> 8) & 255) < 10, "nearly broken: red");
+    }
+    gGame = GameState();
+    ResetSurvival();
+}
+
+static void TestRenderers() {
+    TestHost host;
+    SetHost(&host);
+    RecordSink sink;
+    SetModelSink(&sink);
+    const Vec3 R(1, 0, 0), U(0, 0, 1);
+
+    // things on the ground
+    {
+        DropEntity d;
+        d.pos = Vec3(0.5f, 0.5f, 10.0f);
+        d.stack = Stack(ID_STONE, 20);
+        sink.Reset();
+        CHECK(DrawDrop(d, 1.0f) && sink.quads[1] == 18 && sink.lo.z > 10.0f, "twenty stone: three little cubes, floating (%d)", sink.quads[1]);
+        d.stack = Stack(ID_STICK, 1);
+        sink.Reset();
+        DrawDrop(d, 1.0f);
+        CHECK(sink.quads[1] == 34, "a stick: one flat item");
+        d.stack = ItemStack();
+        CHECK(!DrawDrop(d, 1.0f), "nothing: no drawing, no shadow");
+
+        PrimedTnt t;
+        t.pos = Vec3(0.5f, 0.5f, 10.0f);
+        t.fuse = 2.0f;
+        sink.Reset();
+        DrawPrimedTnt(t, 1.0f);
+        CHECK(sink.quads[1] == 6 && sink.quads[0] == 6, "lit TNT blinks white");
+        t.fuse = 0.3f;
+        sink.Reset();
+        DrawPrimedTnt(t, 1.0f);
+        CHECK(sink.quads[1] == 6 && sink.quads[0] == 0, "and dark");
+        t.fuse = 0.05f;
+        sink.Reset();
+        DrawPrimedTnt(t, 1.0f);
+        CHECK(sink.hi.z - sink.lo.z > 1.1f, "it swells just before the blast (%.2f)", sink.hi.z - sink.lo.z);
+
+        XpOrb o;
+        o.pos = Vec3(0.5f, 0.5f, 10.0f);
+        o.value = 20;
+        sink.Reset();
+        DrawXpOrb(o, R, U);
+        const float small = sink.hi.x - sink.lo.x;
+        o.value = 2500;
+        sink.Reset();
+        DrawXpOrb(o, R, U);
+        CHECK(sink.quads[0] == 1 && sink.hi.x - sink.lo.x > small, "experience orbs: bigger for more");
+    }
+
+    // particles
+    {
+        Particle p;
+        p.pos = Vec3(0.5f, 0.5f, 10.0f);
+        p.size = 0.1f;
+        p.tile = TILE_P_BUBBLE;
+        p.color = 0xFFFFFFFF;
+        sink.Reset();
+        DrawParticle(p, R, U, 0.5f);
+        CHECK(sink.quads[1] == 1 && ((sink.color >> 16) & 255) == 127 && (sink.color >> 24) == 255, "a particle in the dark is darker");
+        p.glow = true;
+        sink.Reset();
+        DrawParticle(p, R, U, 0.5f);
+        CHECK(((sink.color >> 16) & 255) == 255, "a glowing one is not");
+    }
+
+    // falling blocks
+    {
+        BlockStage();
+        gWorld.Set(0, 0, 15, MakeVox(ID_SAND));
+        RunBlocks(0.05f);
+        sink.Reset();
+        DrawFallingBlocks(1.0f);
+        CHECK(!FallingBlocks().empty() && sink.quads[1] == 6 * (int)FallingBlocks().size(), "falling sand is drawn as a cube");
+        BlockRulesClear();
+    }
+
+    // what flies
+    {
+        Projectile pr;
+        pr.type = PJ_ARROW;
+        pr.pos = Vec3(0.5f, 0.5f, 10.0f);
+        pr.vel = Vec3(10, 0, 0);
+        sink.Reset();
+        DrawProjectile(pr, R, U, 1.0f);
+        CHECK(sink.quads[0] == 2 && sink.hi.x - sink.lo.x > 0.85f, "an arrow: two crossed strips along its flight");
+        pr.type = PJ_SNOWBALL;
+        sink.Reset();
+        DrawProjectile(pr, R, U, 1.0f);
+        CHECK(sink.quads[1] == 1 && sink.quads[0] == 0, "a snowball: its sprite");
+        pr.type = PJ_TRIDENT;
+        sink.Reset();
+        DrawProjectile(pr, R, U, 1.0f);
+        CHECK(sink.quads[0] > 6, "a trident: its model");
+
+        Bolt b{ Vec3(0.5f, 0.5f, 10.0f), 0.0f, 12345u };
+        sink.Reset();
+        DrawBolt(b, Vec3(20.5f, 0.5f, 12.0f));
+        CHECK(sink.quads[0] == 2 * (16 + 6 + 6) && sink.hi.z > 100.0f, "lightning: a jagged column 110 m high");
+        b.age = 0.07f;
+        sink.Reset();
+        DrawBolt(b, Vec3(20.5f, 0.5f, 12.0f));
+        CHECK(sink.quads[0] == 0, "it flickers");
+
+        gBobber = Bobber();
+        gBobber.active = true;
+        gBobber.pos = Vec3(5.5f, 0.5f, 10.0f);
+        sink.Reset();
+        DrawFishingHook(R, U, 1.0f);
+        DrawFishingLine(Vec3(0.5f, 0.5f, 11.5f), Vec3(0.5f, -2.0f, 11.6f));
+        CHECK(sink.quads[0] == 1 + 16, "the bobber and a line of sixteen pieces");
+        FishingClear();
+    }
+
+    // cracks and the camera
+    {
+        CHECK(CrackTile(0.0f) == TILE_DESTROY_0 && CrackTile(0.55f) == TILE_DESTROY_0 + 5 && CrackTile(1.5f) == TILE_DESTROY_0 + 9, "ten crack stages");
+        gGame = GameState();
+        Vec3 pos(0, 0, 10), look(0, 1, 0);
+        gGame.bob = 0.1f;
+        gGame.walkDist = 0.25f;
+        BobView(Vec3(0, 1, 0), pos, look);
+        CHECK(pos.z > 10.0f && std::fabs(pos.x) > 0.01f && look.z < 0.0f && Near(look.Length(), 1.0f, 1e-3f), "walking bobs the view");
+        gGame.fovMod = 1.15f;
+        CHECK(Near(FovWanted(70.0f), 80.5f, 1e-3f), "sprinting widens it");
+        gGame.spyglass = true;
+        CHECK(Near(FovWanted(70.0f), 8.05f, 1e-3f), "the spyglass narrows it ten times");
+        gGame = GameState();
+    }
+    SetModelSink(nullptr);
+}
+
+static void TestCreeper() {
+    TestHost host;
+    SetHost(&host);
+    srand(2718);
+    const Vec3 player(0.5f, 0.5f, 11.0f); // (his middle; his feet are on the floor at z = 10)
+
+    // it goes for a player in survival, swells and blows up
+    {
+        MobStage();
+        host.explosions = 0;
+        int c = SpawnMob(MOB_CREEPER, Vec3(8.5f, 0.5f, 10.0f), true);
+        CHECK(c >= 0 && gMobs[c].health == 20.0f && Near(MobHeight(gMobs[c]), 1.7f), "a creeper: 10 hearts, 1.7 m");
+        gGame.gameMode = MODE_CREATIVE;
+        RunMobs(3.0f, player);
+        CHECK(gMobs[c].swell == 0.0f && (gMobs[c].pos - Vec3(0.5f, 0.5f, 10.0f)).Length() > 3.0f, "a player in creative is left alone");
+        gGame.gameMode = MODE_SURVIVAL;
+        gMobs[c].pos = Vec3(8.5f, 0.5f, 10.0f);
+        float t = 0.0f;
+        while (gMobs[c].swell == 0.0f && t < 10.0f) {
+            MobsTick(0.05f, player, 0, true);
+            t += 0.05f;
+        }
+        const float d = (gMobs[c].pos - Vec3(0.5f, 0.5f, 10.0f)).Length();
+        CHECK(t < 4.0f && d < 3.0f && d > 2.0f && Heard(SND_CREEPER_PRIMED) == 1, "it walks up to him and hisses at 3 m (%.1f s)", t);
+        RunMobs(1.0f, player);
+        CHECK(gMobs.size() == 1 && gMobs[c].swell > 0.6f && gMobs[c].vel.Length() < 0.5f, "it stands and swells");
+        RunMobs(0.6f, player);
+        CHECK(gMobs.empty() && host.explosions == 1 && host.lastBlast == BLAST_TNT && Heard(SND_EXPLODE) == 1, "after 1.5 s it blows up, and is gone");
+        CHECK(gWorld.GetBlock(3, 0, 9) == ID_AIR && gDrops.size() > 0 && gGame.deathCause == STR_DEATH_EXPLOSION, "taking the floor with it");
+
+        // running away
+        MobStage();
+        host.explosions = 0;
+        c = SpawnMob(MOB_CREEPER, Vec3(2.5f, 0.5f, 10.0f), true);
+        RunMobs(0.6f, player);
+        CHECK(gMobs[c].swell > 0.2f, "it starts to swell");
+        RunMobs(0.6f, Vec3(10.5f, 0.5f, 11.0f));
+        CHECK(gMobs[c].swellDir < 0 && gMobs[c].swell < 0.5f, "8 m away it calms down");
+        RunMobs(4.0f, Vec3(30.5f, 0.5f, 11.0f));
+        CHECK(gMobs.size() == 1 && gMobs[c].swell == 0.0f && host.explosions == 0, "and does not blow up");
+
+        // hit and killed
+        MobStage();
+        c = SpawnMob(MOB_CREEPER, Vec3(6.5f, 0.5f, 10.0f), true);
+        MobHurt(c, 5.0f, player, 1.0f);
+        CHECK(gMobs[c].panic == 0.0f && Heard(SND_CREEPER_HURT) == 1, "a hit does not scare it");
+        MobHurt(c, 0.0f, player, 0.0f);
+        gMobs[c].hurt = 0.0f;
+        MobHurt(c, 30.0f, player, 0.0f);
+        RunMobs(1.2f, Vec3(40.5f, 0.5f, 11.0f));
+        int xp = 0;
+        for (const XpOrb& o : gXpOrbs)
+            xp += o.value;
+        CHECK(gMobs.empty() && Heard(SND_CREEPER_DEATH) == 1 && CountDrops(ID_GUNPOWDER) <= 2 && xp == 5, "killed: gunpowder and 5 experience");
+    }
+
+    // only at night
+    {
+        MobStage();
+        host.herdGround = true;
+        gRules.animals = false;
+        for (int i = 0; i < 100; ++i)
+            MobsSpawnTick(0.5f, player);
+        CHECK(gMobs.empty(), "no creepers by day");
+        host.dark = true;
+        for (int i = 0; i < 200; ++i)
+            MobsSpawnTick(0.5f, player);
+        bool creepers = !gMobs.empty();
+        for (const Mob& m : gMobs)
+            creepers = creepers && m.kind == MOB_CREEPER && !m.persistent;
+        CHECK(creepers && gMobs.size() == 4, "at night they come out, four at most (%d)", (int)gMobs.size());
+        gRules.monsters = false;
+        MobsClear();
+        for (int i = 0; i < 100; ++i)
+            MobsSpawnTick(0.5f, player);
+        CHECK(gMobs.empty(), "not when the rules say no");
+        host.dark = false;
+    }
+    MobsClear();
+    gRules = GameRules();
+    gGame = GameState();
+}
+
+static void TestShapes() {
+    TestHost host;
+    SetHost(&host);
+    srand(31415);
+
+    // what they are made of
+    {
+        ShapeBox b[kMaxShapeBoxes];
+        CHECK(IsShapedBlock(ID_OAK_STAIRS) && IsSolidBlock(ID_OAK_STAIRS) && !IsOpaqueBlock(ID_OAK_STAIRS) && !IsShapedBlock(ID_STONE),
+              "stairs are solid, but not a full cube");
+        CHECK(BlockShapeBoxes(ID_OAK_STAIRS, FACE_EAST, b) == 2 && b[0].z1 == 0.5f && b[1].x0 == 0.5f && b[1].z0 == 0.5f && b[1].z1 == 1.0f,
+              "stairs: a lower slab and the half rising to the east");
+        CHECK(BlockShapeBoxes(ID_OAK_STAIRS, FACE_SOUTH | META_UPSIDE, b) == 2 && b[0].z0 == 0.5f && b[1].y1 == 0.5f && b[1].z1 == 0.5f,
+              "upside down: the slab on top");
+        CHECK(BlockShapeBoxes(ID_STONE_SLAB, 0, b) == 1 && b[0].z1 == 0.5f, "a slab: the lower half");
+        CHECK(BlockShapeBoxes(ID_STONE_SLAB, META_SLAB_TOP, b) == 1 && b[0].z0 == 0.5f, "or the upper one");
+        CHECK(BlockShapeBoxes(ID_STONE_SLAB, META_SLAB_DOUBLE, b) == 1 && b[0].z0 == 0.0f && b[0].z1 == 1.0f, "or both");
+        CHECK(Craft(3, 3, { ID_OAK_PLANKS, 0, 0, ID_OAK_PLANKS, ID_OAK_PLANKS, 0, ID_OAK_PLANKS, ID_OAK_PLANKS, ID_OAK_PLANKS }).id == ID_OAK_STAIRS &&
+                  Craft(3, 3, { ID_STONE, ID_STONE, ID_STONE, 0, 0, 0, 0, 0, 0 }).id == ID_STONE_SLAB,
+              "both are crafted as in Minecraft");
+    }
+
+    // drawn
+    {
+        BlockMesh m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_OAK_STAIRS, FACE_EAST) } });
+        CHECK(m.verts.size() == 48, "lone stairs: two boxes, twelve faces (%d)", (int)m.verts.size() / 4);
+        float top = 0.0f;
+        for (const MeshVertex& v : m.verts)
+            top = std::max(top, v.z);
+        CHECK(top == 4.0f, "a block high");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_OAK_STAIRS, FACE_EAST) }, { { 3, 3, 2 }, MakeVox(ID_STONE) } });
+        CHECK(m.verts.size() == 44 + 24, "on stone: their bottom is hidden, the stone's top is not");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_STONE_SLAB, 0) } });
+        bool half = true;
+        for (const MeshVertex& v : m.verts)
+            half = half && v.z <= 3.5f;
+        CHECK(m.verts.size() == 24 && half, "a slab: half a block high");
+    }
+
+    // walked on
+    {
+        TestMap map;
+        BlockStage();
+        gWorld.SetRaw(2, 0, 10, MakeVox(ID_OAK_STAIRS, FACE_EAST));
+        gWorld.SetRaw(3, 0, 10, MakeVox(ID_STONE));
+        std::vector<Aabb> boxes;
+        GatherBoxes(map, Aabb{ 2.1f, 0.1f, 10.1f, 2.4f, 0.4f, 10.4f }, boxes);
+        bool low = false;
+        for (const Aabb& a : boxes)
+            low = low || (a.x0 == 2.0f && a.z1 == 10.5f);
+        CHECK(low, "the physics sees the stairs' boxes");
+        Body b = Standing(0.5f, 0.5f);
+        WalkInput in;
+        in.fwd = 1.0f;
+        in.look = Vec3(1, 0, 0); // east
+        WalkEvents ev;
+        float highest = 0.0f, highestX = 0.0f;
+        for (int i = 0; i < 120; ++i) {
+            WalkStep(b, in, 1.0f / 60.0f, map, ev);
+            if (b.pos.z > highest) {
+                highest = b.pos.z;
+                highestX = b.pos.x;
+            }
+        }
+        CHECK(highest > 11.95f && highestX < 4.0f, "walking east the player goes up the stairs onto the stone (%.2f at x %.2f)",
+              highest, highestX);
+    }
+
+    // placed
+    {
+        CombatStage(host);
+        gGame.lookDir = Vec3(1, 0, 0);
+        gTarget = Target();
+        gTarget.valid = gTarget.voxel = true;
+        gTarget.pos = Int3{ 3, 0, 9 };
+        gTarget.face = FACE_TOP;
+        gTarget.point = Vec3(3.5f, 0.5f, 10.0f);
+        gTarget.normal = Vec3(0, 0, 1);
+        gInv.Held() = Stack(ID_OAK_STAIRS, 4);
+        PlaceHeldBlock();
+        const Voxel v = gWorld.Get(3, 0, 10);
+        CHECK(VoxBlock(v) == ID_OAK_STAIRS && VoxMeta(v) == FACE_EAST, "stairs put down looking east rise to the east");
+        gWorld.SetRaw(5, 0, 11, MakeVox(ID_STONE));
+        gTarget.pos = Int3{ 5, 0, 11 };
+        gTarget.face = FACE_WEST;
+        gTarget.point = Vec3(5.0f, 0.5f, 11.8f);
+        gTarget.normal = Vec3(-1, 0, 0);
+        PlaceHeldBlock();
+        CHECK(VoxMeta(gWorld.Get(4, 0, 11)) == (FACE_EAST | META_UPSIDE), "against the upper half of a side: upside down");
+
+        gInv.Held() = Stack(ID_STONE_SLAB, 4);
+        gWorld.SetRaw(3, 0, 10, MakeVox(ID_AIR));
+        gTarget.pos = Int3{ 3, 0, 9 };
+        gTarget.face = FACE_TOP;
+        gTarget.point = Vec3(3.5f, 0.5f, 10.0f);
+        gTarget.normal = Vec3(0, 0, 1);
+        PlaceHeldBlock();
+        CHECK(gWorld.Get(3, 0, 10) == MakeVox(ID_STONE_SLAB, 0) && gInv.Held().count == 3, "a slab on the floor: the lower half");
+        gTarget.pos = Int3{ 3, 0, 10 };
+        gTarget.point = Vec3(3.5f, 0.5f, 10.5f);
+        PlaceHeldBlock();
+        CHECK(gWorld.Get(3, 0, 10) == MakeVox(ID_STONE_SLAB, META_SLAB_DOUBLE) && gWorld.GetBlock(3, 0, 11) == ID_AIR && gInv.Held().count == 2,
+              "another on top of it makes it double");
+        gInv.Held() = Stack(ID_DIAMOND_PICKAXE);
+        BreakVoxel(Int3{ 3, 0, 10 }, true);
+        CHECK(CountDrops(ID_STONE_SLAB) == 2, "a double slab breaks into two (%d)", CountDrops(ID_STONE_SLAB));
+    }
+
+    // panes, bars, fences, walls: they join their neighbours
+    {
+        ShapeBox b[kMaxShapeBoxes];
+        CHECK(ShapeConnections(ID_OAK_FENCE, ID_OAK_FENCE, ID_AIR, ID_STONE, ID_GLASS_PANE) == (1 | 4),
+              "a fence joins a fence and a full block, not air or a pane");
+        CHECK(ShapeConnections(ID_GLASS_PANE, ID_IRON_BARS, ID_GLASS, ID_OAK_STAIRS, ID_GLASS_PANE) == (1 | 2 | 8) &&
+                  ShapeConnections(ID_STONE, ID_STONE, ID_STONE, ID_STONE, ID_STONE) == 0,
+              "a pane joins bars, glass and panes, not stairs; a cube joins nothing");
+        CHECK(BlockShapeBoxes(ID_GLASS_PANE, 0, b, 0) == 1 && b[0].x1 - b[0].x0 == 2.0f / 16.0f, "a lone pane: its post");
+        CHECK(BlockShapeBoxes(ID_OAK_FENCE, 0, b, 1) == 3 && b[1].x0 == 10.0f / 16.0f && b[1].x1 == 1.0f, "a fence: its post and two bars east");
+        CHECK(BlockShapeBoxes(ID_OAK_FENCE, 0, b, 1, true) == 2 && b[0].z1 == 1.5f && b[1].z1 == 1.5f, "bumped into: 1.5 high");
+        CHECK(BlockShapeBoxes(ID_COBBLESTONE_WALL, 0, b, 4 | 8) == 3 && b[1].z1 == 14.0f / 16.0f && b[2].y0 == 0.0f, "a wall north and south");
+        CHECK(Craft(3, 3, { ID_OAK_PLANKS, ID_STICK, ID_OAK_PLANKS, ID_OAK_PLANKS, ID_STICK, ID_OAK_PLANKS, 0, 0, 0 }).id == ID_OAK_FENCE &&
+                  Craft(3, 3, { ID_GLASS, ID_GLASS, ID_GLASS, ID_GLASS, ID_GLASS, ID_GLASS, 0, 0, 0 }).count == 16 &&
+                  Craft(3, 3, { ID_COBBLESTONE, ID_COBBLESTONE, ID_COBBLESTONE, ID_COBBLESTONE, ID_COBBLESTONE, ID_COBBLESTONE, 0, 0, 0 }).id ==
+                      ID_COBBLESTONE_WALL,
+              "crafted as in Minecraft");
+
+        BlockMesh m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_OAK_FENCE) } });
+        CHECK(m.verts.size() == 24, "a lone fence: its post");
+        m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_OAK_FENCE) }, { { 4, 3, 3 }, MakeVox(ID_OAK_FENCE) } });
+        CHECK(m.verts.size() == 2 * 4 * (6 + 5 + 5), "two fences: their bars meet, the faces between them are not drawn (%d)",
+              (int)m.verts.size() / 4);
+
+        TestMap map;
+        BlockStage();
+        gWorld.SetRaw(2, 0, 10, MakeVox(ID_OAK_FENCE));
+        std::vector<Aabb> boxes;
+        GatherBoxes(map, Aabb{ 2.1f, 0.1f, 10.1f, 2.9f, 0.9f, 11.4f }, boxes);
+        bool tall = false;
+        for (const Aabb& a : boxes)
+            tall = tall || a.z1 == 11.5f;
+        CHECK(tall, "the player cannot jump over a fence");
+    }
+
+    // as items
+    {
+        IconQuad q[kMaxIconQuads];
+        CHECK(ItemIcon(ID_OAK_STAIRS, q) == 6 && ItemIcon(ID_STONE_SLAB, q) == 3 && q[0].y[0] > 4.0f, "stairs and slabs in the GUI: their shape");
+        CHECK(ItemIcon(ID_OAK_FENCE, q) == 15 && ItemIcon(ID_GLASS_PANE, q) == 1, "a fence: post and bars; a pane: flat");
+        RecordSink rec;
+        SetModelSink(&rec);
+        rec.Reset();
+        Pose p;
+        DrawItemModel(p, ID_OAK_FENCE, 1.0f);
+        CHECK(rec.quads[1] == 5 * 6, "a fence in the hand: its boxes (%d)", rec.quads[1]);
+        SetModelSink(nullptr);
+    }
+    gWorld.Clear();
+}
+
+static void TestBeds() {
+    TestHost host;
+    SetHost(&host);
+    srand(2718);
+
+    // what a bed is
+    {
+        ShapeBox b[kMaxShapeBoxes];
+        CHECK(BedOtherBlock(ID_RED_BED) == ID_RED_BED_HEAD && BedOtherBlock(ID_RED_BED_HEAD) == ID_RED_BED && BedOtherBlock(ID_STONE) == 0 &&
+                  (FACE_EAST ^ 1) == FACE_WEST && (FACE_NORTH ^ 1) == FACE_SOUTH,
+              "a bed: its foot and its head");
+        CHECK(BlockShapeBoxes(ID_RED_BED, FACE_NORTH, b) == 3 && b[0].z0 == 3.0f / 16.0f && b[0].z1 == 9.0f / 16.0f && b[1].y0 == 0.0f &&
+                  b[1].y1 == 3.0f / 16.0f && b[1].tileFace == FACE_BOTTOM,
+              "the mattress, and the legs at the foot's end");
+        CHECK(BlockShapeBoxes(ID_RED_BED_HEAD, FACE_NORTH, b) == 3 && b[1].y1 == 1.0f, "the head's legs at its end");
+        CHECK(BlockShapeBoxes(ID_RED_BED, FACE_EAST, b, 0, true) == 1 && b[0].z0 == 0.0f && b[0].z1 == 9.0f / 16.0f, "bumped into: one box");
+        const BlockDef& d = Block(ID_RED_BED);
+        CHECK(BlockFaceTile(ID_RED_BED, FACE_SOUTH, FACE_NORTH) == d.tex[FACE_SOUTH] &&
+                  BlockFaceTile(ID_RED_BED, FACE_WEST, FACE_EAST) == d.tex[FACE_SOUTH] &&
+                  BlockFaceTile(ID_RED_BED, FACE_NORTH, FACE_EAST) == d.tex[FACE_WEST],
+              "turned with its head: the foot's end faces away from it");
+        float h = 0.25f, v = 0.0f;
+        TurnUv(ShapeUvTurns(ID_RED_BED, FACE_EAST, FACE_TOP), h, v);
+        CHECK(ShapeUvTurns(ID_RED_BED, FACE_NORTH, FACE_TOP) == 0 && h == 1.0f && v == 0.25f && ShapeUvTurns(ID_STONE_SLAB, 0, FACE_TOP) == 0,
+              "its top turns with it");
+        CHECK(Craft(3, 3, { ID_RED_WOOL, ID_RED_WOOL, ID_RED_WOOL, ID_OAK_PLANKS, ID_OAK_PLANKS, ID_OAK_PLANKS, 0, 0, 0 }).id == ID_RED_BED,
+              "crafted as in Minecraft");
+        IconQuad q[kMaxIconQuads];
+        CHECK(ItemIcon(ID_RED_BED, q) == 18, "in the GUI: both halves");
+        BlockMesh m = MeshOf({ { { 3, 3, 3 }, MakeVox(ID_RED_BED, FACE_NORTH) }, { { 3, 4, 3 }, MakeVox(ID_RED_BED_HEAD, FACE_NORTH) } });
+        CHECK(m.verts.size() == 4 * (2 * 18 - 2), "drawn: the faces between the halves are not (%d)", (int)m.verts.size() / 4);
+    }
+
+    // put down, broken
+    {
+        CombatStage(host);
+        gTarget.valid = gTarget.voxel = true;
+        gTarget.pos = Int3{ 3, 0, 9 };
+        gTarget.face = FACE_TOP;
+        gTarget.point = Vec3(3.5f, 0.5f, 10.0f);
+        gTarget.normal = Vec3(0, 0, 1);
+        gInv.Held() = Stack(ID_RED_BED, 2);
+        PlaceHeldBlock();
+        CHECK(gWorld.Get(3, 0, 10) == MakeVox(ID_RED_BED, FACE_EAST) && gWorld.Get(4, 0, 10) == MakeVox(ID_RED_BED_HEAD, FACE_EAST) &&
+                  gInv.Held().count == 1,
+              "looking east: the foot here, the head beyond");
+        gWorld.SetRaw(4, 2, 10, MakeVox(ID_STONE));
+        gTarget.pos = Int3{ 3, 2, 9 };
+        gTarget.point = Vec3(3.5f, 2.5f, 10.0f);
+        PlaceHeldBlock();
+        CHECK(gWorld.GetBlock(3, 2, 10) == ID_AIR && gInv.Held().count == 1, "no room for the head: no bed");
+
+        gInv.Held() = ItemStack();
+        gGame.gameMode = MODE_SURVIVAL;
+        BreakVoxel(Int3{ 4, 0, 10 }, true);
+        CHECK(gWorld.GetBlock(3, 0, 10) == ID_AIR && gWorld.GetBlock(4, 0, 10) == ID_AIR && CountDrops(ID_RED_BED) == 1,
+              "the head broken: the whole bed goes, one bed drops");
+    }
+
+    // slept in
+    {
+        CombatStage(host);
+        gWorld.SetRaw(3, 0, 10, MakeVox(ID_RED_BED, FACE_EAST));
+        gWorld.SetRaw(4, 0, 10, MakeVox(ID_RED_BED_HEAD, FACE_EAST));
+        gSleep = SleepState();
+        host.hours = 13.0f;
+        CHECK(UseBed(Int3{ 4, 0, 10 }) && !gSleep.asleep && gSleep.spawnSet && gSleep.spawn == (Int3{ 3, 0, 10 }) &&
+                  gGame.message.find("geceleri") != std::string::npos,
+              "by day: no sleep, but the bed is the respawn point");
+        CHECK(!UseBed(Int3{ 5, 0, 10 }), "no bed there");
+        host.hours = 23.5f;
+        gGame.gameMode = MODE_SURVIVAL;
+        int c = SpawnMob(MOB_CREEPER, Vec3(8.5f, 0.5f, 10.0f), true);
+        CHECK(UseBed(Int3{ 3, 0, 10 }) && !gSleep.asleep && gGame.message.find("canavar") != std::string::npos, "a creeper near: no rest");
+        gMobs[c].pos = Vec3(30.5f, 0.5f, 10.0f);
+        UseBed(Int3{ 3, 0, 10 });
+        Vec3 spot, feet, head;
+        CHECK(gSleep.asleep && SleepSpot(&spot) && spot.x == 4.0f && spot.z == 10.0f + 9.0f / 16.0f && SleepPose(&feet, &head) && head.x == 1.0f,
+              "at night: asleep, lying on the bed, the head on the pillow");
+        for (int i = 0; i < 40; ++i)
+            SleepTick(0.05f, false);
+        CHECK(gSleep.asleep && SleepFade() > 0.35f && SleepFade() < 0.45f && host.clockSet < 0.0f, "the screen goes dark");
+        for (int i = 0; i < 70 && gSleep.asleep; ++i)
+            SleepTick(0.05f, false);
+        CHECK(!gSleep.asleep && host.clockSet == 6.0f && host.clockNextDay && SleepFade() > 0.9f, "five seconds: the morning");
+        SleepTick(0.5f, false);
+        CHECK(SleepFade() == 0.0f, "and the dark goes away");
+
+        UseBed(Int3{ 3, 0, 10 });
+        CHECK(!SleepTick(0.05f, true) && !gSleep.asleep && host.clockSet == 6.0f, "the sneak key: he gets up, the night goes on");
+
+        host.moves = 0;
+        BedRespawn();
+        CHECK(host.moves == 1 && host.player.x == 4.0f && host.player.z == 11.0f + 9.0f / 16.0f, "dying, he comes back at his bed");
+        gWorld.SetRaw(4, 0, 10, MakeVox(ID_AIR));
+        BedRespawn();
+        CHECK(host.moves == 1 && !gSleep.spawnSet && gGame.message.find("Yatağın yok") != std::string::npos, "unless it is gone");
+    }
+    gSleep = SleepState();
+    gWorld.Clear();
+}
+
+static void TestWarden() {
+    TestHost host;
+    SetHost(&host);
+    srand(1618);
+    const Vec3 player(0.5f, 0.5f, 11.0f); // (his middle; his feet are on the floor at z = 10)
+
+    MobStage();
+    int w = SpawnMob(MOB_WARDEN, Vec3(6.5f, 0.5f, 10.0f), true);
+    CHECK(w >= 0 && gMobs[w].health == 500.0f && Near(MobHeight(gMobs[w]), 2.9f) && IsMonster(MOB_WARDEN) && !IsMonster(MOB_COW) &&
+              Item(ID_WARDEN_SPAWN_EGG).special == SP_EGG_WARDEN,
+          "a warden: 250 hearts, 2.9 m, from its egg");
+    // it hears him walk, not sneak; not at all in creative
+    host.velocity = Vec3(3, 0, 0);
+    gGame.gameMode = MODE_CREATIVE;
+    RunMobs(3.0f, player);
+    CHECK(gMobs[w].anger == 0.0f, "a player in creative is not heard");
+    gGame.gameMode = MODE_SURVIVAL;
+    gGame.sneaking = true;
+    gMobs[w].pos = Vec3(11.0f, 0.5f, 10.0f);
+    RunMobs(1.5f, player);
+    CHECK(gMobs[w].anger == 0.0f, "nor one who sneaks (further than it smells)");
+    gGame.sneaking = false;
+    gMobs[w].pos = Vec3(9.5f, 0.5f, 10.0f);
+    float t = 0.0f;
+    while (gMobs[w].anger < 80.0f && t < 10.0f) {
+        MobsTick(0.05f, player, 0, true);
+        t += 0.05f;
+    }
+    CHECK(t > 3.5f && t < 4.5f && Heard(SND_WARDEN_LISTENING) >= 2, "walking near it: the third footstep makes it angry (%.1f s)", t);
+    host.velocity = Vec3();
+    RunMobs(1.0f, player);
+    CHECK(gMobs[w].roared && gMobs[w].roar > 0.0f && Heard(SND_WARDEN_ROAR) == 1 && host.playerHurt == 0.0f, "it roars first");
+    // from afar: the sonic boom
+    gMobs[w].pos = Vec3(9.5f, 0.5f, 10.0f);
+    RunMobs(5.5f, player);
+    CHECK(Heard(SND_WARDEN_SONIC_CHARGE) == 1 && Heard(SND_WARDEN_SONIC_BOOM) == 1 && host.playerHurt == 10.0f && host.gusts == 1,
+          "9 m away: a sonic boom, 5 hearts, and he is thrown back (%.1f)", host.playerHurt);
+    // close by: its blows
+    gMobs[w].pos = Vec3(2.0f, 0.5f, 10.0f);
+    gMobs[w].boomCooldown = 10.0f;
+    host.playerHurt = 0.0f;
+    RunMobs(1.0f, player);
+    CHECK(host.playerHurt == 60.0f && Heard(SND_WARDEN_ATTACK) == 2, "next to him: a blow of 15 hearts every 0.9 s (%.0f)", host.playerHurt);
+    // hit: furious, not knocked back
+    gMobs[w].anger = 0.0f;
+    gMobs[w].vel = Vec3();
+    MobHurt(w, 6.0f, Vec3(0.5f, 0.5f, 10.0f), 1.0f);
+    CHECK(gMobs[w].anger == 100.0f && gMobs[w].vel.Length() == 0.0f && gMobs[w].health == 494.0f, "a hit makes it furious; it does not budge");
+    // left alone: it digs back down
+    gGame.gameMode = MODE_CREATIVE;
+    gMobs[w].anger = 0.0f;
+    RunMobs(65.0f, Vec3(40.5f, 0.5f, 11.0f));
+    CHECK(gMobs.empty() && Heard(SND_WARDEN_DIG) == 1 && CountDrops(ID_SCULK_CATALYST) == 0, "a minute after its anger is gone it digs back down");
+    gGame.gameMode = MODE_SURVIVAL;
+    w = SpawnMob(MOB_WARDEN, Vec3(6.5f, 0.5f, 10.0f), true);
+    gMobs[w].health = 1.0f;
+    MobHurt(w, 5.0f, player, 0.0f);
+    RunMobs(1.5f, Vec3(40.5f, 0.5f, 11.0f));
+    CHECK(CountDrops(ID_SCULK_CATALYST) == 1, "killed: a sculk catalyst");
+
+    RecordSink rec;
+    SetModelSink(&rec);
+    rec.Reset();
+    DrawMob(MOB_WARDEN, EntityPose(Vec3(0, 0, 0), Vec3(1, 0, 0), Vec3(0, 0, 1), Vec3(0, 1, 0), 1.0f), MobAnim(), 1.0f, 1, 1, 1);
+    CHECK(rec.quads[0] >= 40 && rec.hi.z > 3.0f && rec.hi.z < 3.8f, "its model: over 3 m with its tendrils (%.2f)", rec.hi.z);
+    SetModelSink(nullptr);
+    MobsClear();
+    gWorld.Clear();
+}
+
 static void TestSave() {
     const char* kPath = "mc_tests_world.tmp";
     BlockStage();
@@ -3132,6 +4768,8 @@ static void TestSave() {
     CHECK(f != nullptr, "the test file can be written");
     if (!f)
         return;
+    gSleep.spawnSet = true;
+    gSleep.spawn = Int3{ 7, -8, 9 };
     WriteWorldFile(f, 1);
     const uint32_t tail = 0xABCD1234; // a section of the host's own
     fwrite(&tail, 4, 1, f);
@@ -3143,7 +4781,8 @@ static void TestSave() {
     gGame = GameState();
     WorldFileInfo info;
     f = fopen(kPath, "rb");
-    CHECK(f && ReadWorldFile(f, info) && info.version == 3 && info.hostValue == 1 && info.blocksOk && info.hostPart, "it reads back");
+    CHECK(f && ReadWorldFile(f, info) && info.version == 4 && info.hostValue == 1 && info.blocksOk && info.hostPart && gSleep.spawnSet && gSleep.spawn == (Int3{ 7, -8, 9 }), "it reads back");
+    gSleep = SleepState();
     uint32_t got = 0;
     CHECK(f && fread(&got, 4, 1, f) == 1 && got == tail, "and leaves the file where the host's own part begins");
     if (f)
@@ -3357,12 +4996,28 @@ int main(int argc, char** argv) {
         printf("creative tab %d: %d items\n", c, (int)CreativeItems(c).size());
         total += CreativeItems(c).size();
     }
-    size_t fluids = 0; // water and lava only come from buckets
+    size_t fluids = 0; // water and lava only come from buckets; a bed's head only with the bed
     for (int b = 1; b < NUM_BLOCKS; ++b)
-        if (IsFluidBlock(b) || IsFireBlock(b))
+        if (IsFluidBlock(b) || IsFireBlock(b) || Block(b).shape == SHAPE_BED_HEAD)
             ++fluids;
     CHECK(total == (size_t)(NUM_BLOCKS - 1 - fluids + ITEM_END - FIRST_ITEM), "creative tabs cover everything (%d vs %d)",
           (int)total, (int)(NUM_BLOCKS - 1 - fluids + ITEM_END - FIRST_ITEM));
+    {
+        auto at = [](int tab, uint16_t id) {
+            const std::vector<uint16_t>& v = CreativeItems(tab);
+            return (int)(std::find(v.begin(), v.end(), id) - v.begin());
+        };
+        CHECK(CreativeItems(CAT_BUILDING)[0] == ID_OAK_LOG && at(CAT_BUILDING, ID_OAK_PLANKS) < at(CAT_BUILDING, ID_OAK_STAIRS) &&
+                  at(CAT_BUILDING, ID_OAK_STAIRS) < at(CAT_BUILDING, ID_SPRUCE_LOG) && at(CAT_BUILDING, ID_STONE) < at(CAT_BUILDING, ID_STONE_STAIRS) &&
+                  at(CAT_BUILDING, ID_STONE_STAIRS) < at(CAT_BUILDING, ID_COBBLESTONE),
+              "the building blocks as in Minecraft: wood by wood type, then stone, each with its stairs and slabs");
+        CHECK(at(CAT_COLORED, ID_WHITE_WOOL) + 1 == at(CAT_COLORED, ID_LIGHT_GRAY_WOOL) && at(CAT_NATURAL, ID_GRASS_BLOCK) == 0 &&
+                  at(CAT_TOOLS, ID_WOODEN_SHOVEL) + 1 == at(CAT_TOOLS, ID_WOODEN_PICKAXE) && at(CAT_FOOD, ID_APPLE) == 0,
+              "colours in Minecraft's order; the natural tab starts with grass; tools by material");
+        CHECK(at(CAT_REDSTONE, ID_REDSTONE) < (int)CreativeItems(CAT_REDSTONE).size() &&
+                  at(CAT_SPAWN_EGGS, ID_WARDEN_SPAWN_EGG) < (int)CreativeItems(CAT_SPAWN_EGGS).size(),
+              "redstone and spawn eggs have their tabs");
+    }
 
     // inventory behaviour
     PlayerInventory inv;
@@ -3381,10 +5036,21 @@ int main(int argc, char** argv) {
     TestEntities();
     TestInteract();
     TestMobs();
+    TestCreeper();
     TestCombat();
     TestFishing();
     TestVillagers();
     TestPlayerHealth();
+    TestHands();
+    TestScreens();
+    TestHud();
+    TestBlockMesh();
+    TestShapes();
+    TestBeds();
+    TestWarden();
+    TestModels();
+    TestPlayerAnim();
+    TestRenderers();
     TestSave();
     TestControls();
     TestGameState();

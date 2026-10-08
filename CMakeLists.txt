@@ -38,20 +38,27 @@ target_compile_options(plugin_sa PUBLIC
     /sdl- /MP /wd4073 /wd4244 /wd4267 /wd4305 /wd4018 /wd4996
 )
 
-# ---------------------------------------------------------------- the mod (.asi)
-file(GLOB MOD_SOURCES ${CMAKE_SOURCE_DIR}/src/*.cpp ${CMAKE_SOURCE_DIR}/src/generated/*.cpp)
+# ---------------------------------------------------------------- the Minecraft side (game rules and data)
+# src/core knows nothing about GTA: it is built without plugin-sdk, so anything GTA in it does not compile.
+file(GLOB CORE_SOURCES ${CMAKE_SOURCE_DIR}/src/core/*.cpp ${CMAKE_SOURCE_DIR}/src/core/generated/*.cpp)
+add_library(mc_core STATIC ${CORE_SOURCES})
+target_include_directories(mc_core PUBLIC ${CMAKE_SOURCE_DIR}/src/core)
+target_compile_definitions(mc_core PUBLIC _CRT_SECURE_NO_WARNINGS)
+target_compile_options(mc_core PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/std:c++latest> /W3 /utf-8 /Zi /MP /sdl-)
+
+# ---------------------------------------------------------------- the GTA SA side: the mod (.asi)
+file(GLOB MOD_SOURCES ${CMAKE_SOURCE_DIR}/src/gta/*.cpp)
 add_library(MinecraftSA SHARED ${MOD_SOURCES})
 set_target_properties(MinecraftSA PROPERTIES SUFFIX ".asi")
-target_include_directories(MinecraftSA PRIVATE ${CMAKE_SOURCE_DIR}/src ${SDK}/stb)
-target_link_libraries(MinecraftSA PRIVATE plugin_sa)
+target_include_directories(MinecraftSA PRIVATE ${CMAKE_SOURCE_DIR}/src/gta ${SDK}/stb)
+target_link_libraries(MinecraftSA PRIVATE mc_core plugin_sa)
 target_link_directories(MinecraftSA PRIVATE ${SDK}/shared/dxsdk)
 target_link_libraries(MinecraftSA PRIVATE d3d9)
 target_compile_options(MinecraftSA PRIVATE /W3 /utf-8 /Zi)
 target_link_options(MinecraftSA PRIVATE /DEBUG /OPT:REF /OPT:ICF)
 
-# ---------------------------------------------------------------- offline logic tests (not shipped)
-add_executable(mc_tests tests/test_main.cpp src/Inventory.cpp src/Items.cpp src/World.cpp src/ModCommon.cpp
-               src/generated/GameData.cpp)
-target_include_directories(mc_tests PRIVATE ${CMAKE_SOURCE_DIR}/src)
-target_link_libraries(mc_tests PRIVATE plugin_sa)
-target_compile_options(mc_tests PRIVATE /utf-8)
+# ---------------------------------------------------------------- offline tests of the core (not shipped)
+# only the core: they run without the game, and prove the core does
+add_executable(mc_tests tests/test_main.cpp)
+target_link_libraries(mc_tests PRIVATE mc_core)
+target_compile_options(mc_tests PRIVATE $<$<COMPILE_LANGUAGE:CXX>:/std:c++latest> /utf-8)

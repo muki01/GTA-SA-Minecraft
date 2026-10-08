@@ -40,10 +40,4 @@ void AddShadow(const CVector& ground, float radius, float strength);
 void RenderFallingBlocks(float light);
 float DaylightFactor();
 
-// item helpers shared with the GUI / hand renderer
-void EmitItemCube(const CVector& center, float half, const CVector& r, const CVector& u, const CVector& f, int block,
-                  float light);
-void EmitItemSprite(const CVector& center, const CVector& axisU, const CVector& axisV, float half, uint16_t tile,
-                    float light);
-
 } // namespace mc

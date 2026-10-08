@@ -4,11 +4,13 @@
 
 #include "BlockRules.h"
 #include "Controls.h"
+#include "Beds.h"
 #include "Entities.h"
 #include "GameState.h"
 #include "Host.h"
 #include "Inventory.h"
 #include "Particles.h"
+#include "Shapes.h"
 #include "Survival.h"
 
 namespace mc {
@@ -53,6 +55,23 @@ int PlacementMeta(int block) {
         if (std::fabs(dir.x) > std::fabs(dir.y))
             return dir.x > 0 ? 3 : 1;
         return dir.y > 0 ? 2 : 0;
+    }
+    if (d.shape == SHAPE_BED) {
+        // the head goes the way the player looks
+        const Vec3& dir = gGame.lookDir;
+        return std::fabs(dir.x) > std::fabs(dir.y) ? (dir.x > 0 ? FACE_EAST : FACE_WEST) : (dir.y > 0 ? FACE_NORTH : FACE_SOUTH);
+    }
+    if (d.shape == SHAPE_STAIRS || d.shape == SHAPE_SLAB) {
+        // the upper half: put under a block, or against the upper half of a side
+        bool upper = gTarget.normal.z < -0.5f;
+        if (std::fabs(gTarget.normal.z) < 0.5f)
+            upper = gTarget.point.z - std::floor(gTarget.point.z) > 0.5f;
+        if (d.shape == SHAPE_SLAB)
+            return upper ? META_SLAB_TOP : 0;
+        // stairs rise away from the player
+        const Vec3& dir = gGame.lookDir;
+        const int side = std::fabs(dir.x) > std::fabs(dir.y) ? (dir.x > 0 ? FACE_EAST : FACE_WEST) : (dir.y > 0 ? FACE_NORTH : FACE_SOUTH);
+        return side | (upper ? META_UPSIDE : 0);
     }
     if (d.shape == SHAPE_COLUMN) {
         Vec3 n = gTarget.normal;
@@ -158,11 +177,20 @@ void BreakVoxel(const Int3& p, bool withDrops) {
         BreakSeconds(block, gInv.Held(), &harvest);
         if (harvest) {
             SpawnBlockDrops(block, c);
+            if (Block(block).shape == SHAPE_SLAB && (VoxMeta(gWorld.Get(p.x, p.y, p.z)) & META_SLAB_DOUBLE))
+                SpawnBlockDrops(block, c); // a double slab is two
             SpawnXp(c, XpForBlock(block));
         }
     }
     DropContainerContents(p);
+    const int meta = VoxMeta(gWorld.Get(p.x, p.y, p.z));
     gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+    if (IsBedBlock(block)) {
+        // the other half goes with it
+        const Int3 o = BedOtherCell(p, block, meta);
+        if (gWorld.GetBlock(o.x, o.y, o.z) == BedOtherBlock(block))
+            gWorld.Set(o.x, o.y, o.z, MakeVox(ID_AIR));
+    }
 }
 
 void InteractTick(float dt) {
@@ -271,6 +299,8 @@ void PickBlock() {
     if (gGame.gameMode != MODE_CREATIVE || !gTarget.valid)
         return;
     int b = gTarget.voxel ? gWorld.GetBlock(gTarget.pos.x, gTarget.pos.y, gTarget.pos.z) : gTarget.virtualBlock;
+    if (Block(b).shape == SHAPE_BED_HEAD)
+        b = BedOtherBlock(b); // (the bed)
     if (b != ID_AIR) {
         gInv.Held().id = (uint16_t)b;
         gInv.Held().count = 1;
@@ -284,14 +314,19 @@ bool IsContainer(int b) {
            b == ID_BARREL;
 }
 
-bool TargetIsContainer() {
-    return gTarget.valid && gTarget.voxel && IsContainer(gWorld.GetBlock(gTarget.pos.x, gTarget.pos.y, gTarget.pos.z));
+bool TargetHasUse() {
+    if (!gTarget.valid || !gTarget.voxel)
+        return false;
+    const int b = gWorld.GetBlock(gTarget.pos.x, gTarget.pos.y, gTarget.pos.z);
+    return IsContainer(b) || IsBedBlock(b);
 }
 
-void OpenTargetContainer() {
+void UseTargetBlock() {
     const Int3& p = gTarget.pos;
     int b = gWorld.GetBlock(p.x, p.y, p.z);
-    if (b == ID_CRAFTING_TABLE)
+    if (IsBedBlock(b))
+        UseBed(p);
+    else if (b == ID_CRAFTING_TABLE)
         OpenScreen(SCREEN_CRAFTING, p);
     else if (b == ID_CHEST || b == ID_BARREL)
         OpenScreen(SCREEN_CHEST, p);
@@ -379,11 +414,36 @@ bool UseWorldItem() {
 
 bool PlaceReady() { return gPlaceCooldown <= 0.0f; }
 
+// a slab put on the free half of a slab of its kind makes a double one
+bool TryDoubleSlab(const Int3& c, int block, bool upperHalf) {
+    const Voxel v = gWorld.Get(c.x, c.y, c.z);
+    if (VoxBlock(v) != block || (VoxMeta(v) & META_SLAB_DOUBLE) || ((VoxMeta(v) & META_SLAB_TOP) != 0) == upperHalf)
+        return false;
+    gWorld.Set(c.x, c.y, c.z, MakeVox(block, META_SLAB_DOUBLE));
+    return true;
+}
+
 void PlaceHeldBlock() {
     ItemStack& h = gInv.Held();
     if (h.Empty() || !IsBlockItem(h.id) || !gTarget.valid || IsFluidBlock(h.id))
         return;
     Int3 p;
+    if (Block(h.id).shape == SHAPE_SLAB && gTarget.voxel) {
+        // clicking the top of a lower slab (the bottom of an upper one) fills it up; so does a slab put into the
+        // cell of one with its other half free
+        bool doubled = (gTarget.face == FACE_TOP || gTarget.face == FACE_BOTTOM) && TryDoubleSlab(gTarget.pos, h.id, gTarget.face == FACE_TOP);
+        const Int3 cell = doubled ? gTarget.pos : gTarget.pos + FACE_DIR[gTarget.face];
+        doubled = doubled || TryDoubleSlab(cell, h.id, (PlacementMeta(h.id) & META_SLAB_TOP) != 0);
+        if (doubled) {
+            const Vec3 c(cell.x + 0.5f, cell.y + 0.5f, cell.z + 0.5f);
+            PlaySfx(PlaceSound(h.id), &c);
+            if (gGame.gameMode == MODE_SURVIVAL && --h.count == 0)
+                h.Clear();
+            gPlaceCooldown = 0.25f;
+            StartSwing();
+            return;
+        }
+    }
     if (IsPlantBlock(h.id)) {
         // plants go on top of soil (blocks or the host's ground)
         if (gTarget.voxel) {
@@ -414,7 +474,15 @@ void PlaceHeldBlock() {
             return;
     }
     int block = h.id;
-    gWorld.Set(p.x, p.y, p.z, MakeVox(block, PlacementMeta(block)));
+    const int meta = PlacementMeta(block);
+    if (Block(block).shape == SHAPE_BED) {
+        // its head needs the cell beyond
+        const Int3 head = BedOtherCell(p, block, meta);
+        if (gWorld.GetBlock(head.x, head.y, head.z) != ID_AIR || !CanPlaceAt(head))
+            return;
+        gWorld.Set(head.x, head.y, head.z, MakeVox(BedOtherBlock(block), meta));
+    }
+    gWorld.Set(p.x, p.y, p.z, MakeVox(block, meta));
     if (block == ID_FURNACE || block == ID_BLAST_FURNACE || block == ID_SMOKER)
         gWorld.furnaces[p] = FurnaceState();
     if (block == ID_CHEST || block == ID_BARREL)

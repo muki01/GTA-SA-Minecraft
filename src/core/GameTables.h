@@ -7,7 +7,7 @@
 
 namespace mc {
 
-enum Shape : uint8_t { SHAPE_CUBE = 0, SHAPE_COLUMN, SHAPE_FACING, SHAPE_CROSS, SHAPE_FLUID, SHAPE_FIRE };
+enum Shape : uint8_t { SHAPE_CUBE = 0, SHAPE_COLUMN, SHAPE_FACING, SHAPE_CROSS, SHAPE_FLUID, SHAPE_FIRE, SHAPE_STAIRS, SHAPE_SLAB, SHAPE_PANE, SHAPE_FENCE, SHAPE_WALL, SHAPE_BED, SHAPE_BED_HEAD };
 enum RenderType : uint8_t { RENDER_AIR = 0, RENDER_OPAQUE, RENDER_CUTOUT, RENDER_TRANSLUCENT };
 enum ToolType : uint8_t { TOOL_NONE = 0, TOOL_PICKAXE, TOOL_AXE, TOOL_SHOVEL, TOOL_HOE, TOOL_SWORD };
 enum ToolTier : uint8_t { TIER_HAND = 0, TIER_WOOD = 1, TIER_STONE = 2, TIER_IRON = 3, TIER_DIAMOND = 4 };
@@ -16,11 +16,11 @@ enum Special : uint8_t {
     SP_WAND = 9, SP_EGG_COW = 10, SP_EGG_PIG, SP_EGG_SHEEP, SP_EGG_CHICKEN, SP_FISHING_ROD = 14, SP_SHEARS = 15,
     SP_BUCKET = 16, SP_FIRE_CHARGE = 17, SP_WIND_CHARGE = 18, SP_SPYGLASS = 19, SP_TOTEM = 20, SP_BOAT = 21,
     SP_MINECART = 22, SP_SADDLE = 23, SP_MILK = 24, SP_TRIDENT = 25, SP_WATER_BUCKET = 26, SP_LAVA_BUCKET = 27,
-    SP_CROSSBOW = 28, SP_BONE_MEAL = 29
+    SP_CROSSBOW = 28, SP_BONE_MEAL = 29, SP_EGG_CREEPER = 30, SP_EGG_WARDEN = 31
 };
 enum Category : uint8_t {
     CAT_BUILDING = 0, CAT_COLORED, CAT_NATURAL, CAT_FUNCTIONAL, CAT_TOOLS, CAT_COMBAT, CAT_FOOD, CAT_INGREDIENTS,
-    CAT_COUNT
+    CAT_REDSTONE, CAT_SPAWN_EGGS, CAT_COUNT
 };
 enum SoundGroup : uint8_t { SG_STONE = 0, SG_WOOD, SG_GRAVEL, SG_GRASS, SG_SAND, SG_GLASS, SG_WOOL, SG_METAL, SG_SNOW };
 enum CookKind : uint8_t { COOK_SMELTING = 0, COOK_BLASTING, COOK_SMOKING };
@@ -116,6 +116,8 @@ extern const ItemDef kItemDefs[];
 extern const ItemDisplay kDisplays[];
 extern const uint8_t kItemDisplay[]; // item id -> index into kDisplays
 extern const uint16_t kIngredientSets[][2];
+extern const uint16_t kCreativeOrder[]; // every block and item in the order of Minecraft's creative tabs
+extern const int kCreativeOrderCount;
 extern const uint16_t kIngredientItems[];
 extern const ShapedRecipe kShaped[];
 extern const ShapelessRecipe kShapeless[];

@@ -16,12 +16,15 @@ int gWinW = 176, gWinH = 166;
 const char* const kTabNames[CAT_COUNT + 1] = {
     "Yap\xC4\xB1 Bloklar\xC4\xB1", "Renkli Bloklar", "Do\xC4\x9F" "al Bloklar", "\xC4\xB0\xC5\x9Flevsel Bloklar",
     "Ara\xC3\xA7lar ve Gere\xC3\xA7ler", "Sava\xC5\x9F", "Yiyecek ve \xC4\xB0\xC3\xA7" "ecekler", "Malzemeler",
-    "Hayatta Kalma Envanteri",
+    "Redstone Bloklar\xC4\xB1", "\xC3\x87" "a\xC4\x9F\xC4\xB1rma Yumurtalar\xC4\xB1", "Hayatta Kalma Envanteri",
 };
 const uint16_t kTabIcons[CAT_COUNT + 1] = { ID_BRICKS, ID_CYAN_WOOL, ID_GRASS_BLOCK, ID_CRAFTING_TABLE, ID_DIAMOND_PICKAXE,
-                                            ID_DIAMOND_SWORD, ID_GOLDEN_APPLE, ID_IRON_INGOT, ID_CHEST };
-const TabPos kTabPos[CAT_COUNT + 1] = { { true, 0 }, { true, 1 }, { true, 2 }, { true, 3 }, { true, 4 }, { true, 5 },
-                                        { false, 0 }, { false, 1 }, { false, 6 } };
+                                            ID_DIAMOND_SWORD, ID_GOLDEN_APPLE, ID_IRON_INGOT, ID_REDSTONE, ID_PIG_SPAWN_EGG,
+                                            ID_CHEST };
+// (Minecraft: building, coloured, natural, functional, redstone on top; tools, combat, food, ingredients, spawn eggs
+// below; the survival inventory at the far right)
+const TabPos kTabPos[CAT_COUNT + 1] = { { true, 0 },  { true, 1 },  { true, 2 },  { true, 3 },  { false, 0 }, { false, 1 },
+                                        { false, 2 }, { false, 3 }, { true, 4 },  { false, 4 }, { false, 6 } };
 
 namespace {
 ItemStack gResult2, gResult3, gTrash;
@@ -78,6 +81,25 @@ std::vector<ItemStack*> PlayerDests(bool hotbarFirst, bool includeHotbar = true,
     return v;
 }
 
+// Minecraft's moveItemStackTo over the player's slots: out of a chest or a result slot it goes backwards (the hotbar
+// from its right end, then the inventory from the bottom), out of anything else forwards (the inventory from the top,
+// then the hotbar from the left)
+std::vector<ItemStack*> PlayerDestsFrom(bool backwards) {
+    std::vector<ItemStack*> v;
+    if (backwards) {
+        for (int i = 8; i >= 0; --i)
+            v.push_back(&gInv.slots[i]);
+        for (int i = INV_SIZE - 1; i >= 9; --i)
+            v.push_back(&gInv.slots[i]);
+    } else {
+        for (int i = 9; i < INV_SIZE; ++i)
+            v.push_back(&gInv.slots[i]);
+        for (int i = 0; i < 9; ++i)
+            v.push_back(&gInv.slots[i]);
+    }
+    return v;
+}
+
 bool ArmorFits(int armorIndex, uint16_t id) { return Item(id).armorSlot == armorIndex + 1; }
 
 void QuickMove(UiSlot& sl) {
@@ -119,7 +141,7 @@ void QuickMove(UiSlot& sl) {
             MoveInto(st, PlayerDests(true, true, false));
         return;
     }
-    MoveInto(st, PlayerDests(false));
+    MoveInto(st, PlayerDestsFrom(sl.group == G_CONTAINER));
 }
 
 bool CanTakeResult(const ItemStack& result) {
@@ -146,7 +168,8 @@ void TakeCraftResult(UiSlot& sl, bool shift) {
             }
             if (free < res.count)
                 return;
-            gInv.Add(res);
+            ItemStack made = res;
+            MoveInto(made, PlayerDestsFrom(true));
             ConsumeIngredients(grid, w * w);
             continue;
         }

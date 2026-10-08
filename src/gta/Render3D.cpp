@@ -17,13 +17,12 @@
 #include "Draw3D.h"
 #include "GtaFishing.h"
 #include "GameState.h"
-#include "Items.h"
 #include "McModel.h"
 #include "GtaMobs.h"
 #include "PedSkins.h"
 #include "Player3D.h"
+#include "Renderers.h"
 #include "Terrain.h"
-#include "Xp.h"
 #include "safetyhook.hpp"
 #include "Textures.h"
 
@@ -93,30 +92,6 @@ float DaylightFactor() {
     float t = CClock::ms_nGameClockHours + CClock::ms_nGameClockMinutes / 60.0f;
     float sun = Smoothstep(5.0f, 7.0f, t) * (1.0f - Smoothstep(19.5f, 21.5f, t));
     return 0.28f + 0.72f * sun;
-}
-
-// ================================================================ item helpers
-void EmitItemCube(const CVector& c, float half, const CVector& r, const CVector& u, const CVector& f, int block,
-                  float light) {
-    for (int face = 0; face < 6; ++face) {
-        TileUV uv = AtlasTileUV(BlockFaceTile(block, face, Block(block).shape == SHAPE_FACING ? 2 : 0));
-        float us[4] = { uv.u0, uv.u1, uv.u1, uv.u0 };
-        float vs[4] = { uv.v1, uv.v1, uv.v0, uv.v0 };
-        float s = Block(block).emissive ? 1.0f : light * kFaceShade[face];
-        CVector p[4];
-        for (int k = 0; k < 4; ++k) {
-            const int* cc = kFaceCorners[face][k];
-            p[k] = c + r * ((cc[0] * 2 - 1) * half) + f * ((cc[1] * 2 - 1) * half) + u * ((cc[2] * 2 - 1) * half);
-        }
-        d3::QuadUV(p, us, vs, d3::Gray(s));
-    }
-}
-
-void EmitItemSprite(const CVector& c, const CVector& au, const CVector& av, float half, uint16_t tile, float light) {
-    TileUV uv = AtlasTileUV(tile);
-    // texture v runs downwards, av points up
-    d3::Quad(c - au * half + av * half, c + au * half + av * half, c + au * half - av * half, c - au * half - av * half,
-             uv.u0, uv.v0, uv.u1, uv.v1, d3::Gray(light));
 }
 
 // ================================================================ passes
@@ -313,82 +288,27 @@ void RenderDropsAndParticles(float light) {
         CVector diff = d.pos - cam;
         if (diff.x * diff.x + diff.y * diff.y + diff.z * diff.z > 80.0f * 80.0f)
             continue;
-        // ItemEntityRenderer: bob, spin, then the model's "ground" transform
-        const uint16_t id = d.stack.id;
-        if (!IsValidItem(id))
-            continue;
-        const float groundScale = kDisplays[kItemDisplay[id]].ground.scale[1];
-        Pose p = WorldPose(d.pos);
-        p.Translate(0.0f, std::sin(d.age * 2.0f + d.spin) * 0.1f + 0.1f + 0.25f * groundScale, 0.0f);
-        p.RotY(d.age + d.spin);
-        int copies = d.stack.count > 48 ? 5 : d.stack.count > 32 ? 4 : d.stack.count > 16 ? 3 : d.stack.count > 1 ? 2 : 1;
-        const bool flat = !IsBlockItem(id);
-        if (flat)
-            p.Translate(0.0f, 0.0f, -0.09375f * groundScale * (copies - 1) * 0.5f);
-        static const float kJitter[5][3] = { { 0, 0, 0 }, { 0.11f, 0.07f, -0.09f }, { -0.1f, 0.12f, 0.08f },
-                                             { 0.06f, -0.04f, 0.13f }, { -0.12f, 0.03f, -0.11f } };
-        for (int i = 0; i < copies; ++i) {
-            Pose q = p;
-            if (flat)
-                q.Translate(0.0f, 0.0f, 0.09375f * groundScale * i);
-            else
-                q.Translate(kJitter[i][0], kJitter[i][1], kJitter[i][2]);
-            ApplyDisplay(q, id, CTX_GROUND);
-            DrawItemModel(q, id, light);
-        }
-        AddShadow(CVector(d.pos.x, d.pos.y, d.pos.z + 0.01f), 0.15f, 0.6f);
+        if (DrawDrop(d, light))
+            AddShadow(CVector(d.pos.x, d.pos.y, d.pos.z + 0.01f), 0.15f, 0.6f);
     }
     d3::SetRaster(gAtlasTex.Raster());
     for (auto& t : gPrimedTnt) {
-        // TntRenderer: swells just before the blast and blinks white
-        float half = 0.49f;
-        if (t.fuse < 0.5f) {
-            float g = Clamp(1.0f - t.fuse / 0.5f, 0.0f, 1.0f);
-            g *= g;
-            half *= 1.0f + g * g * 0.3f;
-        }
-        const CVector c = t.pos + CVector(0, 0, 0.5f);
-        EmitItemCube(c, half, CVector(1, 0, 0), CVector(0, 0, 1), CVector(0, 1, 0), ID_TNT, light);
-        if (((int)(t.fuse * 20.0f) / 5) % 2 == 0) {
-            d3::SetRaster(gEntityTex.Raster());
-            const float h = half + 0.004f;
-            const float u = (ENT_WHITE.x + 4.0f) / ENT_TEX_W, v = (ENT_WHITE.y + 4.0f) / ENT_TEX_H;
-            const RwUInt32 white = d3::Argb(255, 255, 255, 150);
-            for (int face = 0; face < 6; ++face) {
-                CVector q[4];
-                for (int k = 0; k < 4; ++k) {
-                    const int* cc = kFaceCorners[face][k];
-                    q[k] = c + CVector((cc[0] * 2 - 1) * h, (cc[1] * 2 - 1) * h, (cc[2] * 2 - 1) * h);
-                }
-                d3::Quad(q[0], q[1], q[2], q[3], u, v, u, v, white);
-            }
-            d3::SetRaster(gAtlasTex.Raster());
-        }
+        DrawPrimedTnt(t, light);
         AddShadow(CVector(t.pos.x, t.pos.y, t.pos.z + 0.01f), 0.5f, t.onGround ? 1.0f : 0.5f);
     }
-    static const uint16_t kSpark[8] = { TILE_P_SPARK_0, TILE_P_SPARK_1, TILE_P_SPARK_2, TILE_P_SPARK_3,
-                                        TILE_P_SPARK_4, TILE_P_SPARK_5, TILE_P_SPARK_6, TILE_P_SPARK_7 };
-    static const uint16_t kSmoke[8] = { TILE_P_GENERIC_0, TILE_P_GENERIC_1, TILE_P_GENERIC_2, TILE_P_GENERIC_3,
-                                        TILE_P_GENERIC_4, TILE_P_GENERIC_5, TILE_P_GENERIC_6, TILE_P_GENERIC_7 };
-    for (auto& p : gParticles) {
-        uint16_t tile = p.tile;
-        if (p.anim) {
-            int frame = std::clamp((int)((1.0f - p.life / p.maxLife) * 8.0f), 0, 7);
-            tile = p.anim == 1 ? kSpark[7 - frame] : kSmoke[7 - frame];
-        }
-        TileUV uv = AtlasTileUV(tile);
-        float tu = uv.u1 - uv.u0, tv = uv.v1 - uv.v0;
-        float u0 = uv.u0 + tu * p.u, v0 = uv.v0 + tv * p.v;
-        float u1 = u0 + tu * p.sub, v1 = v0 + tv * p.sub;
-        CVector r = camRight * p.size, up = camUp * p.size;
-        RwUInt32 col = p.color;
-        if (!p.glow) {
-            int a = (col >> 24) & 255, rr = (int)(((col >> 16) & 255) * light), gg = (int)(((col >> 8) & 255) * light),
-                bb = (int)((col & 255) * light);
-            col = d3::Argb(rr, gg, bb, a);
-        }
-        d3::Quad(p.pos - r + up, p.pos + r + up, p.pos + r - up, p.pos - r - up, u0, v0, u1, v1, col);
-    }
+    for (auto& p : gParticles)
+        DrawParticle(p, camRight, camUp, light);
+    d3::Flush();
+}
+
+// experience orbs facing the camera
+void RenderXpOrbs() {
+    if (gXpOrbs.empty() || !gEntityTex.tex)
+        return;
+    const CMatrix& cm = TheCamera.m_mCameraMatrix;
+    const CVector R = cm.right * -1.0f, U = cm.at;
+    for (auto& o : gXpOrbs)
+        DrawXpOrb(o, R, U);
     d3::Flush();
 }
 
@@ -399,8 +319,7 @@ void RenderTarget() {
     const float e = 0.004f;
     float x0 = p.x - e, y0 = p.y - e, z0 = p.z - e, x1 = p.x + 1 + e, y1 = p.y + 1 + e, z1 = p.z + 1 + e;
     if (gTargetVisual.progress > 0.0f) {
-        int stage = (int)Clamp(gTargetVisual.progress * 10.0f, 0.0f, 9.0f);
-        TileUV uv = AtlasTileUV(TILE_DESTROY_0 + stage);
+        TileUV uv = AtlasTileUV(CrackTile(gTargetVisual.progress));
         float us[4] = { uv.u0, uv.u1, uv.u1, uv.u0 };
         float vs[4] = { uv.v1, uv.v1, uv.v0, uv.v0 };
         // Minecraft multiplies the cracks onto the block
@@ -499,7 +418,7 @@ void Render3D() {
     d3::Flush();
     const bool holes = Device() && RenderHoles(light, cam, devStates);
     RenderDropsAndParticles(light);
-    XpRender();
+    RenderXpOrbs();
     RenderPlayerModel(light);
     MobsRender(light);
     PedSkinsRender(light);

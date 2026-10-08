@@ -17,9 +17,11 @@ Survival gSurvival;
 void Survival::Respawn() {
     food = 20.0f;
     saturation = 5.0f;
+    burn = 0.0f;
 }
 
 void Survival::NewGame() {
+    burn = 0.0f;
     food = 20.0f;
     saturation = 5.0f;
     exhaustion = 0.0f;
@@ -358,7 +360,7 @@ int XpOrbSize(int amount) {
 }
 
 // ---------------------------------------------------------------- the host's health
-bool HealthTick(float dt, float& health, float maxHealth, float direct) {
+bool HealthTick(float dt, float& health, float maxHealth, float direct, float* hostPool) {
     Survival& s = gSurvival;
     float h = health;
     gGame.hurtTimer = std::max(0.0f, gGame.hurtTimer - dt);
@@ -390,6 +392,15 @@ bool HealthTick(float dt, float& health, float maxHealth, float direct) {
             if (after < left) {
                 h = std::min(maxHealth, h + (left - after));
                 health = h;
+            }
+            // then the yellow hearts the host keeps itself
+            if (hostPool && *hostPool > 0.0f) {
+                const float soak = std::min(std::max(0.0f, s.healthSeen - direct - h), *hostPool);
+                if (soak > 0.0f) {
+                    *hostPool -= soak;
+                    h = std::min(maxHealth, h + soak);
+                    health = h;
+                }
             }
         }
         if (survival && loss + direct > 2.0f)
@@ -442,6 +453,59 @@ void Bubbles(const Vec3& at, int n) {
     }
 }
 } // namespace
+
+bool BurnTick(float dt, int hot, bool wet, bool mortal, float& health, float maxHealth) {
+    Survival& s = gSurvival;
+    if (!mortal || health <= 0.0f) {
+        s.burn = 0.0f;
+        return false;
+    }
+    const float unit = maxHealth / 20.0f; // one Minecraft health point
+    const bool resist = HasEffect(EFFECT_FIRE_RESISTANCE);
+    auto hurt = [&](float points, int cause) {
+        if (resist)
+            return;
+        health = std::max(0.0f, health - points * unit);
+        NoteDamage(cause);
+    };
+    // in fire or lava: a hit every half second (Minecraft's time of invulnerability), and he catches fire
+    s.hotTimer = std::max(0.0f, s.hotTimer - dt);
+    if (hot == ID_FIRE || hot == ID_LAVA) {
+        s.burn = std::max(s.burn, hot == ID_LAVA ? 15.0f : 8.0f);
+        if (s.hotTimer <= 0.0f) {
+            s.hotTimer = 0.5f;
+            hurt(hot == ID_LAVA ? 4.0f : 1.0f, hot == ID_LAVA ? STR_DEATH_LAVA : STR_DEATH_FIRE);
+        }
+    }
+    if (wet)
+        s.burn = 0.0f; // water and rain put him out
+    if (s.burn <= 0.0f) {
+        s.burnTimer = 0.0f;
+        return false;
+    }
+    // on fire: a point a second until it goes out (while the flames under him hit, those count)
+    s.burn = std::max(0.0f, s.burn - dt);
+    s.burnTimer -= dt;
+    if (s.burnTimer <= 0.0f) {
+        s.burnTimer = 1.0f;
+        if (hot == ID_AIR)
+            hurt(1.0f, STR_DEATH_FIRE);
+    }
+    // flames all over him
+    Vec3 at;
+    if (Rand01() < 12.0f * dt && TheHost().PlayerPos(&at)) {
+        Particle f;
+        f.pos = at + Vec3((Rand01() - 0.5f) * 0.6f, (Rand01() - 0.5f) * 0.6f, Rand01() * 1.8f - 0.9f);
+        f.vel = Vec3(0, 0, 0.6f + Rand01() * 0.6f);
+        f.maxLife = f.life = 0.4f + Rand01() * 0.3f;
+        f.tile = TILE_P_FLAME;
+        f.size = 0.08f + Rand01() * 0.06f;
+        f.gravity = 0.0f;
+        f.glow = true;
+        SpawnParticle(f);
+    }
+    return true;
+}
 
 void BreathEffects(float dt, bool bubbling, bool drowned) {
     if (drowned) {

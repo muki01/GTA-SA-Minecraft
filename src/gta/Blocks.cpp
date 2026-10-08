@@ -17,9 +17,9 @@
 #include "GtaWorld.h"
 #include "Movement.h"
 #include "Render3D.h"
+#include "Renderers.h"
 #include "Sound.h"
 #include "Terrain.h"
-#include "Textures.h"
 #include "World.h"
 
 // The GTA side of the block logic: what the GTA map means for the blocks (ground that fills a cell, walls that
@@ -125,21 +125,10 @@ void BurnEntities() {
             if (hot == ID_AIR)
                 hot = HotBlockAt(pos);
             const bool isPlayer = ped == player;
-            if (isPlayer) {
-                // our water puts the player out
-                if (ped->m_pFire && FluidAt(pos + CVector(0, 0, -0.5f)) == ID_WATER)
-                    gFireManager.ExtinguishPoint(pos, 3.0f);
-                if (hot == ID_AIR || gGame.gameMode == MODE_CREATIVE)
-                    continue;
-                if (hot == ID_LAVA && MovementControllerActive())
-                    continue; // the movement code burns the player in lava itself
-            } else if (hot == ID_AIR) {
-                continue;
-            }
+            if (isPlayer || hot == ID_AIR)
+                continue; // (the player burns by Minecraft's rules: Survival BurnTick)
             if (ped->bFireProof)
                 continue; // fire resistance
-            if (isPlayer)
-                NoteDamage(hot == ID_LAVA ? STR_DEATH_LAVA : STR_DEATH_FIRE);
             if (!ped->m_pFire)
                 gFireManager.StartFire(ped, nullptr, 0.8f, 1, 7000, 1);
             CWeapon::GenerateDamageEvent(ped, nullptr, WEAPONTYPE_FTHROWER, hot == ID_LAVA ? 10 : 3, (ePedPieceTypes)3, 0);
@@ -196,12 +185,9 @@ void BlocksUpdate(float dt) {
 }
 
 void RenderFallingBlocks(float light) {
-    const std::vector<FallingBlock>& falling = FallingBlocks();
-    if (falling.empty())
+    if (FallingBlocks().empty())
         return;
-    d3::SetRaster(gAtlasTex.Raster());
-    for (auto& f : falling)
-        EmitItemCube(ToGta(f.pos) + CVector(0, 0, 0.5f), 0.5f, CVector(1, 0, 0), CVector(0, 0, 1), CVector(0, 1, 0), f.block, light);
+    DrawFallingBlocks(light);
     d3::Flush();
 }
 
