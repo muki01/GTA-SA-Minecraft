@@ -21,7 +21,7 @@ using namespace plugin;
 class MinecraftSA {
 public:
     MinecraftSA() {
-        mc::Log("MinecraftSA 0.29 loading (game version: %s)", GetGameVersionName());
+        mc::Log("MinecraftSA 0.30 loading (game version: %s)", GetGameVersionName());
         if (!IsGameVersion10us()) {
             mc::Log("ERROR: only GTA SA 1.0 US is supported, mod disabled");
             MessageBoxA(nullptr, "MinecraftSA: sadece GTA San Andreas 1.0 US surumu destekleniyor.", "MinecraftSA",
