@@ -1,0 +1,716 @@
+#include "BlockRules.h"
+
+#include <cstdlib>
+#include <unordered_set>
+
+#include "Audio.h"
+#include "Entities.h"
+#include "Particles.h"
+
+namespace mc {
+
+namespace {
+std::vector<FallingBlock> gFalling;
+
+struct Scheduled {
+    Int3 p;
+    float due;
+};
+std::vector<Scheduled> gFluidQueue;
+std::unordered_set<Int3, Int3Hash> gFluidScheduled;
+float gTickTimer = 0.0f;
+float gNow = 0.0f; // the host's clock at this tick
+
+constexpr float kWaterDelay = 0.25f, kLavaDelay = 1.5f;
+
+Int3 Up(const Int3& p) { return { p.x, p.y, p.z + 1 }; }
+Int3 Down(const Int3& p) { return { p.x, p.y, p.z - 1 }; }
+Vec3 Centre(const Int3& p) { return Vec3(p.x + 0.5f, p.y + 0.5f, p.z + 0.5f); }
+
+// lava and water met
+void Fizz(const Int3& p) {
+    const Vec3 c = Centre(p);
+    PlaySfx(SND_LAVA_EXTINGUISH, &c, 0.6f, 2.6f + (Rand01() - Rand01()) * 0.8f);
+    for (int i = 0; i < 8; ++i) {
+        Particle s;
+        s.pos = c + Vec3(Rand01() - 0.5f, Rand01() - 0.5f, 0.4f);
+        s.vel = Vec3(0, 0, 1.0f + Rand01());
+        s.maxLife = s.life = 0.8f;
+        s.tile = TILE_P_GENERIC_0;
+        s.anim = 2;
+        s.size = 0.15f;
+        s.gravity = -0.5f;
+        s.color = 0xFF404040;
+        SpawnParticle(s);
+    }
+}
+
+void ScheduleFluid(const Int3& p, float delay) {
+    if (gFluidQueue.size() > 20000)
+        return;
+    if (gFluidScheduled.insert(p).second)
+        gFluidQueue.push_back({ p, gNow + delay });
+}
+
+int FluidHeightLevel(Voxel v) { return (VoxMeta(v) & META_FLUID_FALLING) ? 0 : (VoxMeta(v) & META_FLUID_LEVEL); }
+bool IsSource(Voxel v) { return IsFluidBlock(VoxBlock(v)) && (VoxMeta(v) & 0xF) == 0; }
+
+bool CanFlowInto(int fluid, const Int3& from, const Int3& to) {
+    const int b = gWorld.GetBlock(to.x, to.y, to.z);
+    const int other = fluid == ID_WATER ? ID_LAVA : ID_WATER;
+    if (b != ID_AIR && b != fluid && b != other && !IsPlantBlock(b) && !IsFireBlock(b))
+        return false;
+    if (to.z < -200)
+        return false;
+    if (b == ID_AIR || IsPlantBlock(b) || IsFireBlock(b)) {
+        if (TheHost().SolidCell(to))
+            return false;
+        if (to.z == from.z && TheHost().WallBetween(from, to))
+            return false;
+    }
+    return true;
+}
+
+void FlowInto(int fluid, const Int3& from, const Int3& to, int meta) {
+    const Voxel tv = gWorld.Get(to.x, to.y, to.z);
+    const int b = VoxBlock(tv);
+    if (b == ID_LAVA && fluid == ID_WATER) {
+        gWorld.Set(to.x, to.y, to.z, MakeVox(IsSource(tv) ? ID_OBSIDIAN : ID_COBBLESTONE));
+        Fizz(to);
+        return;
+    }
+    if (b == ID_WATER && fluid == ID_LAVA) {
+        gWorld.Set(to.x, to.y, to.z, MakeVox(to.z < from.z ? ID_STONE : ID_COBBLESTONE));
+        Fizz(to);
+        return;
+    }
+    if (b == fluid) {
+        if (IsSource(tv))
+            return;
+        const int cur = FluidHeightLevel(tv), want = (meta & META_FLUID_FALLING) ? 0 : (meta & META_FLUID_LEVEL);
+        if (cur <= want && !((meta & META_FLUID_FALLING) && !(VoxMeta(tv) & META_FLUID_FALLING)))
+            return;
+    }
+    if (IsPlantBlock(b))
+        SpawnBlockDrops(b, Centre(to));
+    if (IsFireBlock(b)) {
+        const Vec3 c = Centre(to);
+        PlaySfx(SND_FIRE_EXTINGUISH, &c, 0.5f);
+    }
+    gWorld.Set(to.x, to.y, to.z, MakeVox(fluid, meta));
+}
+
+void FluidTick(const Int3& p) {
+    const Voxel v = gWorld.Get(p.x, p.y, p.z);
+    const int F = VoxBlock(v);
+    if (!IsFluidBlock(F))
+        return;
+    int meta = VoxMeta(v);
+    const int drop = F == ID_WATER ? 1 : 2;
+
+    // lava that touches water hardens
+    if (F == ID_LAVA) {
+        const Int3 around[5] = { Up(p), { p.x + 1, p.y, p.z }, { p.x - 1, p.y, p.z }, { p.x, p.y + 1, p.z }, { p.x, p.y - 1, p.z } };
+        for (const Int3& n : around)
+            if (gWorld.GetBlock(n.x, n.y, n.z) == ID_WATER) {
+                gWorld.Set(p.x, p.y, p.z, MakeVox(IsSource(v) ? ID_OBSIDIAN : ID_COBBLESTONE));
+                Fizz(p);
+                return;
+            }
+    }
+
+    const Int3 below = Down(p);
+    if (!IsSource(v)) {
+        // a flowing cell lives from its neighbours
+        const bool fromAbove = gWorld.GetBlock(p.x, p.y, p.z + 1) == F;
+        int best = 99, sources = 0;
+        for (int f = 0; f < 4; ++f) {
+            const Int3& d = FACE_DIR[f];
+            Voxel nv = gWorld.Get(p.x + d.x, p.y + d.y, p.z);
+            if (VoxBlock(nv) != F)
+                continue;
+            best = std::min(best, FluidHeightLevel(nv));
+            if (IsSource(nv))
+                sources++;
+        }
+        const Voxel bv = gWorld.Get(below.x, below.y, below.z);
+        int newMeta;
+        if (F == ID_WATER && sources >= 2 && (IsSolidBlock(VoxBlock(bv)) || IsSource(bv) || TheHost().SolidCell(below)))
+            newMeta = 0; // infinite water
+        else if (fromAbove)
+            newMeta = META_FLUID_FALLING;
+        else if (best + drop <= 7)
+            newMeta = best + drop;
+        else {
+            gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+            return;
+        }
+        if (newMeta != meta) {
+            gWorld.Set(p.x, p.y, p.z, MakeVox(F, newMeta));
+            meta = newMeta;
+        }
+    }
+
+    // spread: down first, sideways only when it cannot fall
+    if (CanFlowInto(F, p, below)) {
+        FlowInto(F, p, below, META_FLUID_FALLING);
+        return;
+    }
+    const int spread = ((meta & META_FLUID_FALLING) ? 0 : (meta & META_FLUID_LEVEL)) + drop;
+    if (spread > 7)
+        return;
+    for (int f = 0; f < 4; ++f) {
+        const Int3& d = FACE_DIR[f];
+        Int3 n{ p.x + d.x, p.y + d.y, p.z };
+        if (CanFlowInto(F, p, n))
+            FlowInto(F, p, n, spread);
+    }
+}
+
+// ---------------------------------------------------------------- fire (FireBlock)
+bool FlammableAround(const Int3& p) {
+    for (const Int3& d : FACE_DIR)
+        if (FireIgnite(gWorld.GetBlock(p.x + d.x, p.y + d.y, p.z + d.z)) > 0)
+            return true;
+    return false;
+}
+
+int IgniteOddsAt(const Int3& p) {
+    int best = 0;
+    for (const Int3& d : FACE_DIR)
+        best = std::max(best, FireIgnite(gWorld.GetBlock(p.x + d.x, p.y + d.y, p.z + d.z)));
+    return best;
+}
+
+bool SturdyBelow(const Int3& p) {
+    const int below = gWorld.GetBlock(p.x, p.y, p.z - 1);
+    return IsSolidBlock(below) || (below == ID_AIR && TheHost().Supports(p));
+}
+
+// FireBlock.canSurvive
+bool FireSurvives(const Int3& p) { return SturdyBelow(p) || FlammableAround(p); }
+
+void SetFire(const Int3& p, int age) {
+    gWorld.Set(p.x, p.y, p.z, MakeVox(ID_FIRE, std::clamp(age, 0, 15)));
+}
+
+// FireBlock.checkBurnOut
+void BurnOut(const Int3& n, int chance, int age) {
+    const int b = gWorld.GetBlock(n.x, n.y, n.z);
+    const int odds = FireBurn(b);
+    if (odds <= 0 || rand() % chance >= odds)
+        return;
+    if (b == ID_TNT) {
+        gWorld.Set(n.x, n.y, n.z, MakeVox(ID_AIR));
+        IgniteTnt(n, 4.0f);
+        return;
+    }
+    if (rand() % (age + 10) < 5)
+        SetFire(n, age + (rand() % 5) / 4);
+    else
+        gWorld.Set(n.x, n.y, n.z, MakeVox(ID_AIR));
+}
+
+void FireTick(const Int3& p) {
+    const Voxel v = gWorld.Get(p.x, p.y, p.z);
+    if (VoxBlock(v) != ID_FIRE)
+        return;
+    if (!FireSurvives(p)) {
+        gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+        return;
+    }
+    const int age = VoxMeta(v);
+    // rain puts fires out (outside)
+    if (TheHost().Raining() && Rand01() < 0.2f + age * 0.03f) {
+        gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+        return;
+    }
+    const int newAge = std::min(15, age + (rand() % 3) / 2);
+    if (newAge != age)
+        gWorld.SetRaw(p.x, p.y, p.z, MakeVox(ID_FIRE, newAge));
+    const int below = gWorld.GetBlock(p.x, p.y, p.z - 1);
+    if (!FlammableAround(p)) {
+        if (!SturdyBelow(p) || age > 3)
+            gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+        return;
+    }
+    if (age == 15 && rand() % 4 == 0 && FireBurn(below) == 0) {
+        gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+        return;
+    }
+    for (int f = 0; f < 6; ++f) {
+        const Int3& d = FACE_DIR[f];
+        BurnOut({ p.x + d.x, p.y + d.y, p.z + d.z }, f >= 4 ? 250 : 300, age);
+    }
+    // spread into the air around (more likely upwards)
+    for (int dz = -1; dz <= 4; ++dz)
+        for (int dy = -1; dy <= 1; ++dy)
+            for (int dx = -1; dx <= 1; ++dx) {
+                if (dx == 0 && dy == 0 && dz == 0)
+                    continue;
+                const Int3 q{ p.x + dx, p.y + dy, p.z + dz };
+                if (gWorld.GetBlock(q.x, q.y, q.z) != ID_AIR)
+                    continue;
+                const int odds = IgniteOddsAt(q);
+                if (odds <= 0)
+                    continue;
+                const int k = 100 + (dz > 1 ? (dz - 1) * 100 : 0);
+                const int l = (odds + 40 + 14) / (age + 30);
+                if (l > 0 && rand() % k <= l)
+                    SetFire(q, age + (rand() % 5) / 4);
+            }
+}
+
+// LavaFluid.randomTick: lava sets things around it on fire
+void LavaTick(const Int3& p) {
+    const int i = rand() % 3;
+    if (i > 0) {
+        Int3 q = p;
+        for (int j = 0; j < i; ++j) {
+            q = { q.x + rand() % 3 - 1, q.y + rand() % 3 - 1, q.z + 1 };
+            const int b = gWorld.GetBlock(q.x, q.y, q.z);
+            if (b == ID_AIR) {
+                if (IgniteOddsAt(q) > 0 || TheHost().FlammableUnder(q)) {
+                    SetFire(q, 0);
+                    return;
+                }
+            } else if (IsSolidBlock(b)) {
+                return;
+            }
+        }
+    } else {
+        for (int k = 0; k < 3; ++k) {
+            const Int3 q{ p.x + rand() % 3 - 1, p.y + rand() % 3 - 1, p.z };
+            const Int3 up{ q.x, q.y, q.z + 1 };
+            if (gWorld.GetBlock(up.x, up.y, up.z) == ID_AIR &&
+                (FireIgnite(gWorld.GetBlock(q.x, q.y, q.z)) > 0 || TheHost().FlammableUnder(up)))
+                SetFire(up, 0);
+        }
+    }
+}
+
+// ---------------------------------------------------------------- neighbour updates, falling blocks
+void BlockUpdate(const Int3& p) {
+    const Voxel v = gWorld.Get(p.x, p.y, p.z);
+    const int b = VoxBlock(v);
+    if (b == ID_AIR)
+        return;
+    if (IsFluidBlock(b)) {
+        ScheduleFluid(p, b == ID_WATER ? kWaterDelay : kLavaDelay);
+        return;
+    }
+    if (IsGravityBlock(b)) {
+        const int below = gWorld.GetBlock(p.x, p.y, p.z - 1);
+        if (!IsSolidBlock(below) && !TheHost().Supports(p)) {
+            FallingBlock f;
+            f.pos = Vec3(p.x + 0.5f, p.y + 0.5f, (float)p.z);
+            f.vel = Vec3(0, 0, 0);
+            f.block = b;
+            gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+            if (gFalling.size() < 400)
+                gFalling.push_back(f);
+        }
+        return;
+    }
+    if (IsPlantBlock(b)) {
+        const int below = gWorld.GetBlock(p.x, p.y, p.z - 1);
+        if (!IsSolidBlock(below) && !TheHost().Supports(p)) {
+            SpawnBlockDrops(b, Centre(p));
+            gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+        }
+        return;
+    }
+    if (IsFireBlock(b) && !FireSurvives(p))
+        gWorld.Set(p.x, p.y, p.z, MakeVox(ID_AIR));
+}
+
+void UpdateFalling(float dt) {
+    for (size_t i = 0; i < gFalling.size();) {
+        FallingBlock& f = gFalling[i];
+        f.age += dt;
+        f.vel.z = std::max(-60.0f, f.vel.z - 32.0f * dt);
+        Vec3 np = f.pos + f.vel * dt;
+        bool landed = false;
+        const Int3 cell{ FloorI(np.x), FloorI(np.y), FloorI(np.z) };
+        if (gWorld.IsSolid(cell.x, cell.y, cell.z) || TheHost().CapAt(cell, nullptr)) {
+            np.z = (float)cell.z + 1.0f;
+            landed = true;
+        } else {
+            float gz;
+            if (GroundBelow(Vec3(np.x, np.y, f.pos.z + 0.3f), 1.0f, &gz) && np.z <= gz) {
+                np.z = gz;
+                landed = true;
+            }
+        }
+        f.pos = np;
+        if (landed || f.age > 20.0f || f.pos.z < -200.0f) {
+            const Int3 at{ FloorI(f.pos.x), FloorI(f.pos.y), FloorI(f.pos.z + 0.25f) };
+            const int there = gWorld.GetBlock(at.x, at.y, at.z);
+            if (landed && (there == ID_AIR || IsFluidBlock(there) || IsPlantBlock(there))) {
+                gWorld.Set(at.x, at.y, at.z, MakeVox(f.block));
+                Vec3 c = Centre(at);
+                PlaySfx((SoundEvent)(SND_PLACE_STONE + Block(f.block).sound), &c, 0.6f);
+            } else {
+                SpawnDropItem(f.pos + Vec3(0, 0, 0.5f), (uint16_t)f.block, 1);
+            }
+            gFalling[i] = gFalling.back();
+            gFalling.pop_back();
+        } else {
+            ++i;
+        }
+    }
+}
+
+// ---------------------------------------------------------------- trees
+bool Free(int x, int y, int z) {
+    int b = gWorld.GetBlock(x, y, z);
+    return b == ID_AIR || IsPlantBlock(b) || (Block(b).sound == SG_GRASS && Block(b).render == RENDER_CUTOUT);
+}
+
+void Leaf(int x, int y, int z, int leaves) {
+    int b = gWorld.GetBlock(x, y, z);
+    if (b == ID_AIR || IsPlantBlock(b))
+        gWorld.SetRaw(x, y, z, MakeVox(leaves));
+}
+
+void PutLog(int x, int y, int z, int log) { gWorld.SetRaw(x, y, z, MakeVox(log)); }
+
+struct Species {
+    int sapling, log, leaves;
+};
+
+void Blob(int x, int y, int top, int leaves, int lower, int upper) {
+    // oak style crown: two wide layers, two narrow ones
+    for (int dz = -3; dz <= 0; ++dz) {
+        const int r = dz >= -1 ? upper : lower;
+        for (int dy = -r; dy <= r; ++dy)
+            for (int dx = -r; dx <= r; ++dx) {
+                const bool corner = std::abs(dx) == r && std::abs(dy) == r;
+                if (corner && (dz == 0 || Rand01() < 0.5f))
+                    continue;
+                Leaf(x + dx, y + dy, top + dz, leaves);
+            }
+    }
+    Leaf(x, y, top + 1, leaves);
+    Leaf(x + 1, y, top + 1, leaves);
+    Leaf(x - 1, y, top + 1, leaves);
+    Leaf(x, y + 1, top + 1, leaves);
+    Leaf(x, y - 1, top + 1, leaves);
+}
+
+bool GrowAt(const Int3& p, const Species& s) {
+    const int x = p.x, y = p.y, z = p.z;
+    int height = 4 + rand() % 3;
+    if (s.log == ID_BIRCH_LOG)
+        height = 5 + rand() % 3;
+    else if (s.log == ID_SPRUCE_LOG)
+        height = 6 + rand() % 4;
+    else if (s.log == ID_JUNGLE_LOG)
+        height = 6 + rand() % 5;
+    for (int h = 1; h <= height + 1; ++h)
+        if (!Free(x, y, z + h))
+            return false;
+    gWorld.SetRaw(x, y, z, MakeVox(ID_AIR));
+    gWorld.ticking.erase(p);
+    if (gWorld.GetBlock(x, y, z - 1) == ID_GRASS_BLOCK)
+        gWorld.SetRaw(x, y, z - 1, MakeVox(ID_DIRT));
+
+    if (s.log == ID_SPRUCE_LOG) {
+        for (int h = 0; h < height; ++h)
+            PutLog(x, y, z + h, s.log);
+        // cone: radius 0..3 growing downwards, every other layer narrower
+        int r = 0;
+        for (int zz = z + height; zz >= z + 2; --zz) {
+            for (int dy = -r; dy <= r; ++dy)
+                for (int dx = -r; dx <= r; ++dx) {
+                    if (std::abs(dx) == r && std::abs(dy) == r && r > 0)
+                        continue;
+                    if (dx == 0 && dy == 0 && zz < z + height)
+                        continue;
+                    Leaf(x + dx, y + dy, zz, s.leaves);
+                }
+            r = r >= 2 + (height > 7) ? 1 : r + 1;
+        }
+        Leaf(x, y, z + height, s.leaves);
+    } else if (s.log == ID_ACACIA_LOG || s.log == ID_CHERRY_LOG) {
+        // the trunk bends to one side, a flat crown on top
+        const int dir = rand() % 4;
+        const Int3& d = FACE_DIR[dir];
+        const int straight = 2 + rand() % 2;
+        int cx = x, cy = y, cz = z;
+        for (int h = 0; h < height; ++h) {
+            if (h >= straight) {
+                cx += d.x;
+                cy += d.y;
+            }
+            PutLog(cx, cy, cz, s.log);
+            ++cz;
+        }
+        for (int dy = -3; dy <= 3; ++dy)
+            for (int dx = -3; dx <= 3; ++dx) {
+                if (std::abs(dx) + std::abs(dy) > 4)
+                    continue;
+                Leaf(cx + dx, cy + dy, cz - 1, s.leaves);
+                if (std::abs(dx) + std::abs(dy) <= 2)
+                    Leaf(cx + dx, cy + dy, cz, s.leaves);
+            }
+    } else {
+        for (int h = 0; h < height; ++h)
+            PutLog(x, y, z + h, s.log);
+        const bool big = s.log == ID_DARK_OAK_LOG || s.log == ID_JUNGLE_LOG;
+        Blob(x, y, z + height - 1, s.leaves, big ? 3 : 2, big ? 2 : 1);
+    }
+    const Vec3 c = Centre(p);
+    GrowthSparkles(c + Vec3(0, 0, 1.0f), 15);
+    PlaySfx(SND_PLACE_GRASS, &c);
+    return true;
+}
+
+Species SpeciesOf(int sapling) {
+    switch (sapling) {
+    case ID_SPRUCE_SAPLING: return { sapling, ID_SPRUCE_LOG, ID_SPRUCE_LEAVES };
+    case ID_BIRCH_SAPLING: return { sapling, ID_BIRCH_LOG, ID_BIRCH_LEAVES };
+    case ID_JUNGLE_SAPLING: return { sapling, ID_JUNGLE_LOG, ID_JUNGLE_LEAVES };
+    case ID_ACACIA_SAPLING: return { sapling, ID_ACACIA_LOG, ID_ACACIA_LEAVES };
+    case ID_DARK_OAK_SAPLING: return { sapling, ID_DARK_OAK_LOG, ID_DARK_OAK_LEAVES };
+    case ID_CHERRY_SAPLING: return { sapling, ID_CHERRY_LOG, ID_CHERRY_LEAVES };
+    default: return { sapling, ID_OAK_LOG, ID_OAK_LEAVES };
+    }
+}
+} // namespace
+
+// ================================================================ public
+void GrowthSparkles(const Vec3& at, int n) {
+    for (int i = 0; i < n; ++i) {
+        Particle p;
+        p.pos = at + Vec3((Rand01() - 0.5f) * 1.2f, (Rand01() - 0.5f) * 1.2f, Rand01() * 0.8f);
+        p.vel = Vec3(0, 0, 0.3f);
+        p.maxLife = p.life = 0.9f;
+        p.tile = TILE_P_GLINT;
+        p.size = 0.08f;
+        p.gravity = 0.0f;
+        p.color = 0xFF50E050;
+        p.glow = true;
+        SpawnParticle(p);
+    }
+}
+
+const std::vector<FallingBlock>& FallingBlocks() { return gFalling; }
+
+void BlockRulesClear() {
+    gFalling.clear();
+    gFluidQueue.clear();
+    gFluidScheduled.clear();
+}
+
+void BlocksTick(float dt, float now) {
+    gNow = now;
+    // neighbour updates queued by World::Set
+    if (!gWorld.updates.empty()) {
+        std::vector<Int3> batch;
+        const size_t n = std::min<size_t>(gWorld.updates.size(), 600);
+        batch.assign(gWorld.updates.begin(), gWorld.updates.begin() + n);
+        gWorld.updates.erase(gWorld.updates.begin(), gWorld.updates.begin() + n);
+        std::unordered_set<Int3, Int3Hash> seen;
+        for (const Int3& p : batch)
+            if (seen.insert(p).second)
+                BlockUpdate(p);
+    }
+    // fluids
+    if (!gFluidQueue.empty()) {
+        std::vector<Int3> due;
+        for (size_t i = 0; i < gFluidQueue.size();) {
+            if (gFluidQueue[i].due <= gNow && due.size() < 300) {
+                due.push_back(gFluidQueue[i].p);
+                gFluidScheduled.erase(gFluidQueue[i].p);
+                gFluidQueue[i] = gFluidQueue.back();
+                gFluidQueue.pop_back();
+            } else {
+                ++i;
+            }
+        }
+        for (const Int3& p : due)
+            FluidTick(p);
+    }
+    UpdateFalling(dt);
+    // random ticks: saplings grow, lava sets things on fire, fire spreads and dies down
+    gTickTimer += dt;
+    if (gTickTimer >= 1.0f) {
+        gTickTimer = 0.0f;
+        std::vector<Int3> cells(gWorld.ticking.begin(), gWorld.ticking.end());
+        for (const Int3& p : cells) {
+            const int b = gWorld.GetBlock(p.x, p.y, p.z);
+            if (IsSaplingBlock(b)) {
+                if (Rand01() < 1.0f / 50.0f)
+                    GrowSapling(p);
+            } else if (b == ID_LAVA) {
+                if (Rand01() < 0.35f)
+                    LavaTick(p);
+            } else if (b == ID_FIRE) {
+                if (Rand01() < 0.6f)
+                    FireTick(p);
+            } else {
+                gWorld.ticking.erase(p);
+            }
+        }
+    }
+}
+
+bool PlaceFluid(int block, const Int3& c) {
+    const int b = gWorld.GetBlock(c.x, c.y, c.z);
+    if (b != ID_AIR && !IsPlantBlock(b) && !IsFluidBlock(b) && !IsFireBlock(b))
+        return false;
+    if (IsPlantBlock(b))
+        SpawnBlockDrops(b, Centre(c));
+    gWorld.Set(c.x, c.y, c.z, MakeVox(block, 0));
+    TheHost().FluidPlaced(c);
+    return true;
+}
+
+bool TakeFluid(const Int3& c, int* block) {
+    const Voxel v = gWorld.Get(c.x, c.y, c.z);
+    if (!IsSource(v))
+        return false;
+    *block = VoxBlock(v);
+    gWorld.Set(c.x, c.y, c.z, MakeVox(ID_AIR));
+    return true;
+}
+
+int FluidAt(const Vec3& p) {
+    const int x = FloorI(p.x), y = FloorI(p.y), z = FloorI(p.z);
+    const Voxel v = gWorld.Get(x, y, z);
+    const int b = VoxBlock(v);
+    if (!IsFluidBlock(b))
+        return ID_AIR;
+    float h = 1.0f;
+    if (!(VoxMeta(v) & META_FLUID_FALLING) && gWorld.GetBlock(x, y, z + 1) != b)
+        h = (8.0f - (VoxMeta(v) & META_FLUID_LEVEL)) / 9.0f;
+    return p.z - z <= h ? b : ID_AIR;
+}
+
+float FluidDepth(const Vec3& feet, float height, int* block) {
+    int found = ID_AIR, inside = 0;
+    for (int i = 0; i < 4; ++i) {
+        int b = FluidAt(feet + Vec3(0, 0, 0.05f + (height - 0.1f) * i / 3.0f));
+        if (b != ID_AIR) {
+            found = b;
+            ++inside;
+        }
+    }
+    if (block)
+        *block = found;
+    return inside / 4.0f;
+}
+
+int PlantCellOnGround(float groundZ) { return FloorI(groundZ + 0.25f); }
+
+Vec3 FluidFlowAt(const Int3& c) {
+    const Voxel v = gWorld.Get(c.x, c.y, c.z);
+    const int b = VoxBlock(v);
+    if (!IsFluidBlock(b))
+        return Vec3(0, 0, 0);
+    return FluidFlowT(b, v, [&](int dx, int dy, int dz) { return gWorld.Get(c.x + dx, c.y + dy, c.z + dz); });
+}
+
+bool PlaceFire(const Int3& c) {
+    const int b = gWorld.GetBlock(c.x, c.y, c.z);
+    if (b != ID_AIR && !IsPlantBlock(b))
+        return false;
+    if (!FireSurvives(c))
+        return false;
+    SetFire(c, 0);
+    return true;
+}
+
+bool FireAt(const Vec3& p) { return gWorld.GetBlock(FloorI(p.x), FloorI(p.y), FloorI(p.z)) == ID_FIRE; }
+
+bool GrowSapling(const Int3& p) {
+    const int b = gWorld.GetBlock(p.x, p.y, p.z);
+    if (!IsSaplingBlock(b)) {
+        gWorld.ticking.erase(p);
+        return false;
+    }
+    return GrowAt(p, SpeciesOf(b));
+}
+
+bool CanPlantAt(int plant, const Int3& c, bool creative) {
+    const int here = gWorld.GetBlock(c.x, c.y, c.z);
+    if (here != ID_AIR)
+        return false;
+    const int below = gWorld.GetBlock(c.x, c.y, c.z - 1);
+    const bool sandy = plant == ID_DEAD_BUSH;
+    const bool mushroom = plant == ID_BROWN_MUSHROOM || plant == ID_RED_MUSHROOM;
+    if (below != ID_AIR)
+        return IsSolidBlock(below) &&
+               (creative || mushroom || IsSoil(below) ||
+                (sandy && (below == ID_SAND || below == ID_RED_SAND || below == ID_TERRACOTTA)));
+    // on the host's ground
+    if (!TheHost().Supports(c))
+        return false;
+    return creative || mushroom || TheHost().SoilBelow(Vec3(c.x + 0.5f, c.y + 0.5f, c.z + 1.2f), sandy, nullptr);
+}
+
+bool ApplyBoneMeal(bool voxel, const Int3& cell, const Vec3& point, const Vec3& normal, bool hostGrass) {
+    auto spread = [&](float cx, float cy, float cz) {
+        int placed = 0;
+        for (int i = 0; i < 24 && placed < 10; ++i) {
+            const int x = FloorI(cx) + rand() % 7 - 3, y = FloorI(cy) + rand() % 7 - 3;
+            const uint16_t plant = Rand01() < 0.7f ? ID_SHORT_GRASS : (Rand01() < 0.85f ? RandomFlower() : ID_FERN);
+            // a grass block nearby?
+            bool done = false;
+            for (int z = FloorI(cz) + 2; z >= FloorI(cz) - 2 && !done; --z)
+                if (gWorld.GetBlock(x, y, z) == ID_GRASS_BLOCK && gWorld.GetBlock(x, y, z + 1) == ID_AIR) {
+                    gWorld.Set(x, y, z + 1, MakeVox(plant));
+                    done = true;
+                }
+            float gz;
+            if (!done && TheHost().SoilBelow(Vec3(x + 0.5f, y + 0.5f, cz + 2.0f), false, &gz)) {
+                const int z = PlantCellOnGround(gz);
+                if (gWorld.GetBlock(x, y, z) == ID_AIR) {
+                    gWorld.Set(x, y, z, MakeVox(plant));
+                    done = true;
+                }
+            }
+            if (done) {
+                ++placed;
+                GrowthSparkles(Vec3(x + 0.5f, y + 0.5f, cz + 0.5f), 2);
+            }
+        }
+        return placed > 0;
+    };
+    if (voxel) {
+        const int b = gWorld.GetBlock(cell.x, cell.y, cell.z);
+        if (IsSaplingBlock(b)) {
+            GrowthSparkles(Centre(cell), 10);
+            if (Rand01() < 0.45f)
+                GrowSapling(cell);
+            return true;
+        }
+        if (b == ID_GRASS_BLOCK && normal.z > 0.5f) {
+            spread(cell.x + 0.5f, cell.y + 0.5f, cell.z + 1.0f);
+            GrowthSparkles(Centre(cell) + Vec3(0, 0, 0.6f), 8);
+            return true;
+        }
+        return false;
+    }
+    if (hostGrass) {
+        spread(point.x, point.y, point.z);
+        GrowthSparkles(point, 8);
+        return true;
+    }
+    return false;
+}
+
+uint16_t RandomFlower() {
+    static const uint16_t kFlowers[] = { ID_DANDELION, ID_POPPY, ID_BLUE_ORCHID, ID_ALLIUM, ID_AZURE_BLUET, ID_RED_TULIP,
+                                         ID_ORANGE_TULIP, ID_WHITE_TULIP, ID_PINK_TULIP, ID_OXEYE_DAISY, ID_CORNFLOWER,
+                                         ID_LILY_OF_THE_VALLEY };
+    return kFlowers[rand() % (sizeof(kFlowers) / sizeof(kFlowers[0]))];
+}
+
+bool IsSoil(int b) {
+    return b == ID_GRASS_BLOCK || b == ID_DIRT || b == ID_PODZOL || b == ID_COARSE_DIRT || b == ID_MYCELIUM ||
+           b == ID_MOSS_BLOCK || b == ID_MUD;
+}
+
+} // namespace mc
