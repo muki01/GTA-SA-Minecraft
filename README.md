@@ -1,10 +1,15 @@
 <div align="center">
 
+<img src="docs/images/logo.png" alt="GTA SA Minecraft logo: GTA SA written in Minecraft stone letters" width="420">
+
 # GTA SA Minecraft: Minecraft Mod for GTA San Andreas
 
 **Play Minecraft and GTA San Andreas together, in one world.**<br>
 Mine and build blocks in Los Santos, craft, survive, fight Creepers and the Warden, and blow holes into the map with TNT. Then jump into a car and drive off with a hotbar full of blocks.
 
+[![Build and test](https://github.com/muki01/GTA-SA-Minecraft/actions/workflows/build.yml/badge.svg)](https://github.com/muki01/GTA-SA-Minecraft/actions/workflows/build.yml)
+[![License: MIT](https://img.shields.io/github/license/muki01/GTA-SA-Minecraft)](LICENSE)
+[![GitHub stars](https://img.shields.io/github/stars/muki01/GTA-SA-Minecraft?style=flat&logo=github)](https://github.com/muki01/GTA-SA-Minecraft/stargazers)
 ![Game: GTA San Andreas](https://img.shields.io/badge/game-GTA%20San%20Andreas%201.0%20US-orange)
 ![Minecraft crossover](https://img.shields.io/badge/crossover-Minecraft-62B47A)
 ![Mod type: ASI plugin](https://img.shields.io/badge/mod-ASI%20plugin-blue)
@@ -33,7 +38,10 @@ Mine and build blocks in Los Santos, craft, survive, fight Creepers and the Ward
 - [Settings](#settings)
 - [Project structure](#project-structure)
 - [FAQ](#faq)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
 - [Credits](#credits)
+- [License](#license)
 - [Disclaimer](#disclaimer)
 - [Türkçe](#türkçe)
 
@@ -237,11 +245,32 @@ English (the default) and Turkish. The names and messages come from Minecraft's 
 **Where do I download it?**
 On the [Releases page](https://github.com/muki01/GTA-SA-Minecraft/releases/latest). Extract the zip into the GTA San Andreas folder; see [Installation](#installation).
 
+**I found a bug / I have an idea.**
+Open a [bug report](https://github.com/muki01/GTA-SA-Minecraft/issues/new?template=bug_report.yml) or a [feature request](https://github.com/muki01/GTA-SA-Minecraft/issues/new?template=feature_request.yml). Questions and screenshots are welcome in [Discussions](https://github.com/muki01/GTA-SA-Minecraft/discussions).
+
+## Roadmap
+
+Ideas for coming versions, not promises:
+- More night monsters: zombies, skeletons and spiders.
+- Torches, lanterns, doors and trapdoors.
+- More redstone: levers, buttons and pistons.
+- More ways for Minecraft and GTA to mix.
+
+What changed in each version is in the [changelog](CHANGELOG.md).
+
+## Contributing
+
+Bug reports, ideas, screenshots and pull requests are welcome. Start with [CONTRIBUTING.md](CONTRIBUTING.md), and please follow the [Code of Conduct](CODE_OF_CONDUCT.md). Security problems are reported as described in [SECURITY.md](SECURITY.md).
+
 ## Credits
 
 - [plugin-sdk](https://github.com/DK22Pac/plugin-sdk) by DK22Pac and contributors: the GTA SA modding SDK (includes [safetyhook](https://github.com/cursey/safetyhook)).
 - [gta-reversed](https://github.com/gta-reversed/gta-reversed): used as a reference for the GTA SA engine.
 - Minecraft is by Mojang Studios; Grand Theft Auto: San Andreas is by Rockstar Games.
+
+## License
+
+The source code is released under the [MIT License](LICENSE). Minecraft's textures, sounds, names and data are © Mojang Studios and are not covered by this license. GTA San Andreas is © Rockstar Games.
 
 ## Disclaimer
 
@@ -260,6 +289,10 @@ Oyun dili İngilizce ya da Türkçe olabilir. Ana menüdeki **Language... / Dil.
 **Anahtar kelimeler:** GTA San Andreas Minecraft modu, GTA SA Minecraft, Minecraft GTA mod, GTA SA mod, Minecraft mod.
 
 ---
+
+## Star history
+
+[![Star history chart](https://api.star-history.com/svg?repos=muki01/GTA-SA-Minecraft&type=Date)](https://star-history.com/#muki01/GTA-SA-Minecraft&Date)
 
 <div align="center">
 
