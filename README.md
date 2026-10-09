@@ -65,6 +65,7 @@ The mod uses Minecraft's original textures, sounds, models, recipes and loot tab
 - **Minecraft physics** for walking, sprinting, sneaking, jumping and swimming. Water and lava flow; sand and gravel fall; fire spreads.
 - **First- and third-person camera,** with the Minecraft player model (Steve) and armour shown on him.
 - **Minecraft-style menus:** title screen, world list and pause menu.
+- **English or Turkish:** every block and item name, menu, tab, message and death screen switches language. English is the default; pick another language with the **Language...** button, as in Minecraft.
 
 ### Mobs and people
 - **Animals:** cows, pigs, sheep and chickens. Breed them, shear sheep, milk cows, saddle and ride pigs.
@@ -122,12 +123,30 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A Win32
 cmake --build build --config Release --target MinecraftSA
 ```
 
-**Install:**
-1. Copy `build/Release/MinecraftSA.asi` into your GTA San Andreas folder.
-2. Copy `assets/*.png` into `<GTA folder>/MinecraftSA/`.
-3. Copy `assets/sounds/*.ogg` into `<GTA folder>/MinecraftSA/sounds/`.
+**Install into the game:**
+1. Make sure your `gta_sa.exe` is version **1.0 US**. If you have the Steam or Rockstar Launcher version, downgrade it first.
+2. Install an **ASI loader** into the GTA San Andreas folder, for example Silent's ASI Loader or Ultimate ASI Loader.
+3. Copy `build/Release/MinecraftSA.asi` into the GTA San Andreas folder, next to `gta_sa.exe`.
+4. Create the folder `<GTA folder>/MinecraftSA/` and copy `assets/*.png` into it.
+5. Create `<GTA folder>/MinecraftSA/sounds/` and copy `assets/sounds/*.ogg` into it.
+6. Start the game. The Minecraft title screen appears. On first start the mod writes its settings file, `MinecraftSA/MinecraftSA.ini`.
 
-`build_and_install.bat` does all of this at once. Set the `GTA` path at its top first.
+`build_and_install.bat` builds and copies everything at once. Set the `GTA` path at its top first.
+
+The finished game folder looks like this:
+
+```
+GTA San Andreas/
+├── gta_sa.exe                (version 1.0 US)
+├── <ASI loader files>
+├── MinecraftSA.asi
+└── MinecraftSA/
+    ├── atlas.png, entity.png, font.png, gui.png, menu.png
+    ├── sounds/*.ogg
+    └── MinecraftSA.ini       (written on first start)
+```
+
+**Uninstall:** delete `MinecraftSA.asi` and the `MinecraftSA` folder. GTA's own save games are not touched; the Minecraft worlds are stored next to the mod as `MinecraftSA/world_slotN.dat`.
 
 **Offline tests:**
 
@@ -165,6 +184,7 @@ In a car you drive as in GTA. The hotbar, the inventory and right-click items su
 
 | Setting | Meaning |
 |---------|---------|
+| `Language=en` | language of everything Minecraft says: `en` English, `tr` Turkish (also in the game: **Language...**) |
 | `FOV=70` | field of view (0 = GTA's own) |
 | `MinecraftControls=1` | Minecraft keys for jump, sprint and sneak |
 | `MinecraftPhysics=1` | Minecraft movement physics (0 = GTA's) |
@@ -199,11 +219,11 @@ No. It needs the PC version 1.0 US executable, which is what most GTA SA mods re
 **Is Minecraft included?**
 No. You need the Minecraft resources yourself (see [Building and installing](#building-and-installing)). No Mojang or Rockstar files are in this repository.
 
-**Which language is the game text in?**
-In-game names and messages are currently Turkish: Minecraft's own Turkish names for blocks and items.
+**Which languages are there?**
+English (the default) and Turkish. The names and messages come from Minecraft's own language files. Change the language with the **Language...** button on the title screen or in the pause menu, or with `Language=` in the ini. GTA's own texts, such as missions and its HUD, stay in GTA's language.
 
 **Is there a download (release)?**
-Not yet. The mod is in active development; build it from source for now.
+Not yet. Minecraft's textures and sounds belong to Mojang, and a ready-made download would have to ship them. For now, build the mod from source with your own Minecraft resources.
 
 ## Credits
 
@@ -223,7 +243,7 @@ This is a fan-made, non-commercial mod. It is not affiliated with, endorsed by o
 - Creeper ve Warden ile savaş, TNT ile haritada çukur aç.
 - Arabana binip hotbar'ındaki bloklarla şehirde dolaş.
 
-Oyun içi yazılar Türkçedir. Kurulum için yukarıdaki *Building and installing* bölümüne bak.
+Oyun dili İngilizce ya da Türkçe olabilir. Ana menüdeki **Language... / Dil...** düğmesinden seçilir; varsayılan dil İngilizcedir. Kurulum için yukarıdaki *Building and installing* bölümüne bak.
 
 **Anahtar kelimeler:** GTA San Andreas Minecraft modu, GTA SA Minecraft, Minecraft GTA mod, GTA SA mod, Minecraft mod.
 
