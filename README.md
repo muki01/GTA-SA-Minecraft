@@ -11,8 +11,12 @@ Mine and build blocks in Los Santos, craft, survive, fight Creepers and the Ward
 ![Language: C++](https://img.shields.io/badge/language-C%2B%2B-00599C?logo=cplusplus)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows-0078D6?logo=windows)
 ![Status: in development](https://img.shields.io/badge/status-in%20development-yellow)
+[![Download the latest release](https://img.shields.io/github/v/release/muki01/GTA-SA-Minecraft?label=download&color=brightgreen)](https://github.com/muki01/GTA-SA-Minecraft/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/muki01/GTA-SA-Minecraft/total?color=brightgreen)](https://github.com/muki01/GTA-SA-Minecraft/releases)
 
 <img src="docs/images/gta-sa-minecraft-mod-screenshot.png" alt="GTA San Andreas Minecraft mod: Steve in diamond armour with a bow on a Los Santos street, next to a Minecraft wooden house and tree, GTA cars, villagers and the Minecraft hotbar, hearts and hunger bar" width="100%">
+
+### [⬇ Download the latest version](https://github.com/muki01/GTA-SA-Minecraft/releases/latest)
 
 </div>
 
@@ -23,7 +27,8 @@ Mine and build blocks in Los Santos, craft, survive, fight Creepers and the Ward
 - [What is GTA SA Minecraft?](#what-is-gta-sa-minecraft)
 - [Features](#features)
 - [Requirements](#requirements)
-- [Building and installing](#building-and-installing)
+- [Installation](#installation)
+- [Building from source](#building-from-source)
 - [Controls](#controls)
 - [Settings](#settings)
 - [Project structure](#project-structure)
@@ -42,7 +47,7 @@ Mine and build blocks in Los Santos, craft, survive, fight Creepers and the Ward
 
 Break the GTA map itself: roads give blackstone, pavements give stone bricks and grass gives dirt. Dig holes into the ground that cars and pedestrians fall into, or break into buildings and cliffs. Build a house on Grove Street, fight a Creeper in Ganton, or fly over Los Santos with an elytra and fireworks.
 
-The mod uses Minecraft's original textures, sounds, models, recipes and loot tables, read from your own copy of the game's resources. Nothing from Minecraft is included in this repository.
+The mod uses Minecraft's original textures, sounds, models, recipes and loot tables. The source code here contains no Minecraft files. The textures and sounds the mod needs come packed in the release download.
 
 ## Features
 
@@ -94,17 +99,47 @@ The mod uses Minecraft's original textures, sounds, models, recipes and loot tab
 | GTA San Andreas (PC) | **1.0 US** executable (`gta_sa.exe`) |
 | ASI loader | e.g. Silent's ASI Loader or Ultimate ASI Loader |
 | Windows | 10 or 11 |
-| Minecraft resources | the unpacked Minecraft 26.3 assets and data (textures, sounds, models, lang, recipes) |
 
-To build from source you also need:
+Minecraft itself is not needed to play.
+
+## Installation
+
+1. You need **GTA San Andreas for PC, version 1.0 US** (`gta_sa.exe`). The Steam and Rockstar Launcher versions must be downgraded to 1.0 first.
+2. Install an **ASI loader** into the GTA San Andreas folder, for example Silent's ASI Loader or Ultimate ASI Loader.
+3. **[Download the latest release](https://github.com/muki01/GTA-SA-Minecraft/releases/latest)**: `GTA-SA-Minecraft-vX.XX.zip`.
+4. Extract the zip into the GTA San Andreas folder: `MinecraftSA.asi` goes next to `gta_sa.exe`, together with the `MinecraftSA` folder.
+5. Start the game. The Minecraft title screen appears.
+   - The game starts in English. Pick Turkish with the **Language...** button.
+   - The settings file `MinecraftSA/MinecraftSA.ini` is written on first start.
+
+The game folder then looks like this:
+
+```
+GTA San Andreas/
+├── gta_sa.exe                (version 1.0 US)
+├── <ASI loader files>
+├── MinecraftSA.asi
+└── MinecraftSA/
+    ├── atlas.png, entity.png, font.png, gui.png, menu.png
+    ├── sounds/*.ogg
+    ├── OKUBENI.txt           (full guide in Turkish)
+    └── MinecraftSA.ini       (written on first start)
+```
+
+**Updating:** extract the new release over the old files. Your Minecraft worlds stay.
+
+**Uninstall:** delete `MinecraftSA.asi` and the `MinecraftSA` folder. GTA's own save games are not touched; the Minecraft worlds are stored in `MinecraftSA/world_slotN.dat`.
+
+If something goes wrong, open an issue and attach `MinecraftSA/MinecraftSA.log`.
+
+## Building from source
+
+You only need this to change the mod. The build turns Minecraft's resources into the mod's texture atlases, sounds and game tables. It needs:
 - **Visual Studio 2022** with the C++ desktop workload.
 - **CMake 3.21+**.
 - **Python 3** with `pillow` and `numpy`.
 - **Git**.
-
-## Building and installing
-
-Minecraft's textures and sounds belong to Mojang and cannot be shipped here, so you build the mod yourself. The build turns your Minecraft resources into the mod's texture atlases and sounds.
+- The unpacked **Minecraft 26.3** resources: assets and data, including sounds and language files.
 
 ```bash
 # 1. get the code, with the plugin-sdk submodule
@@ -123,30 +158,7 @@ cmake -S . -B build -G "Visual Studio 17 2022" -A Win32
 cmake --build build --config Release --target MinecraftSA
 ```
 
-**Install into the game:**
-1. Make sure your `gta_sa.exe` is version **1.0 US**. If you have the Steam or Rockstar Launcher version, downgrade it first.
-2. Install an **ASI loader** into the GTA San Andreas folder, for example Silent's ASI Loader or Ultimate ASI Loader.
-3. Copy `build/Release/MinecraftSA.asi` into the GTA San Andreas folder, next to `gta_sa.exe`.
-4. Create the folder `<GTA folder>/MinecraftSA/` and copy `assets/*.png` into it.
-5. Create `<GTA folder>/MinecraftSA/sounds/` and copy `assets/sounds/*.ogg` into it.
-6. Start the game. The Minecraft title screen appears. On first start the mod writes its settings file, `MinecraftSA/MinecraftSA.ini`.
-
-`build_and_install.bat` builds and copies everything at once. Set the `GTA` path at its top first.
-
-The finished game folder looks like this:
-
-```
-GTA San Andreas/
-├── gta_sa.exe                (version 1.0 US)
-├── <ASI loader files>
-├── MinecraftSA.asi
-└── MinecraftSA/
-    ├── atlas.png, entity.png, font.png, gui.png, menu.png
-    ├── sounds/*.ogg
-    └── MinecraftSA.ini       (written on first start)
-```
-
-**Uninstall:** delete `MinecraftSA.asi` and the `MinecraftSA` folder. GTA's own save games are not touched; the Minecraft worlds are stored next to the mod as `MinecraftSA/world_slotN.dat`.
+The result is `build/Release/MinecraftSA.asi`, plus `assets/*.png` and `assets/sounds/*.ogg`, which go into `<GTA folder>/MinecraftSA/`. `build_and_install.bat` builds and copies everything at once; set the `GTA` path at its top first.
 
 **Offline tests:**
 
@@ -216,14 +228,14 @@ The core decides **what** happens and the GTA layer knows **how** to show it in 
 **Does it work with the Definitive Edition, the Steam version or SA-MP?**
 No. It needs the PC version 1.0 US executable, which is what most GTA SA mods require.
 
-**Is Minecraft included?**
-No. You need the Minecraft resources yourself (see [Building and installing](#building-and-installing)). No Mojang or Rockstar files are in this repository.
+**Do I need Minecraft to play?**
+No. The release contains everything the mod needs: its packed Minecraft textures and sounds. You need your own GTA San Andreas. No Rockstar files are included.
 
 **Which languages are there?**
 English (the default) and Turkish. The names and messages come from Minecraft's own language files. Change the language with the **Language...** button on the title screen or in the pause menu, or with `Language=` in the ini. GTA's own texts, such as missions and its HUD, stay in GTA's language.
 
-**Is there a download (release)?**
-Not yet. Minecraft's textures and sounds belong to Mojang, and a ready-made download would have to ship them. For now, build the mod from source with your own Minecraft resources.
+**Where do I download it?**
+On the [Releases page](https://github.com/muki01/GTA-SA-Minecraft/releases/latest). Extract the zip into the GTA San Andreas folder; see [Installation](#installation).
 
 ## Credits
 
@@ -233,7 +245,7 @@ Not yet. Minecraft's textures and sounds belong to Mojang, and a ready-made down
 
 ## Disclaimer
 
-This is a fan-made, non-commercial mod. It is not affiliated with, endorsed by or connected to Mojang Studios, Microsoft, Rockstar Games or Take-Two Interactive. "Minecraft" and "Grand Theft Auto" are trademarks of their respective owners. You need legal copies of both games.
+This is a fan-made, non-commercial mod. It is not affiliated with, endorsed by or connected to Mojang Studios, Microsoft, Rockstar Games or Take-Two Interactive. "Minecraft" and "Grand Theft Auto" are trademarks of their respective owners. Minecraft's textures and sounds are © Mojang Studios and are used here for a non-commercial fan project. GTA San Andreas is © Rockstar Games; you need your own copy of the game.
 
 ## Türkçe
 
@@ -243,7 +255,7 @@ This is a fan-made, non-commercial mod. It is not affiliated with, endorsed by o
 - Creeper ve Warden ile savaş, TNT ile haritada çukur aç.
 - Arabana binip hotbar'ındaki bloklarla şehirde dolaş.
 
-Oyun dili İngilizce ya da Türkçe olabilir. Ana menüdeki **Language... / Dil...** düğmesinden seçilir; varsayılan dil İngilizcedir. Kurulum için yukarıdaki *Building and installing* bölümüne bak.
+Oyun dili İngilizce ya da Türkçe olabilir. Ana menüdeki **Language... / Dil...** düğmesinden seçilir; varsayılan dil İngilizcedir. **İndir:** [son sürüm](https://github.com/muki01/GTA-SA-Minecraft/releases/latest). Zip'i GTA San Andreas klasörüne çıkar, oyunu başlat. Gerekenler: GTA SA 1.0 US ve bir ASI loader. Ayrıntılar yukarıdaki *Installation* bölümünde.
 
 **Anahtar kelimeler:** GTA San Andreas Minecraft modu, GTA SA Minecraft, Minecraft GTA mod, GTA SA mod, Minecraft mod.
 
