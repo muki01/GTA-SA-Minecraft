@@ -1,0 +1,32 @@
+name: Build and test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build (Win32) and run the core tests
+    runs-on: windows-2022
+    steps:
+      - name: Check out the code and plugin-sdk
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Configure
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A Win32
+
+      - name: Build the core tests
+        run: cmake --build build --config Release --target mc_tests
+
+      - name: Run the core tests
+        run: build\Release\mc_tests.exe
+
+      - name: Build the mod
+        run: cmake --build build --config Release --target MinecraftSA

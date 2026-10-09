@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://github.com/muki01/GTA-SA-Minecraft/discussions
+    about: Installation questions, ideas and screenshots are welcome in Discussions.
+  - name: Download the mod
+    url: https://github.com/muki01/GTA-SA-Minecraft/releases/latest
+    about: The latest release, with installation steps.

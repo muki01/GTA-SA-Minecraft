@@ -1,0 +1,57 @@
+name: Bug report
+description: Something does not work as it should in the game.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report a bug. Please search the [existing issues](https://github.com/muki01/GTA-SA-Minecraft/issues) first.
+  - type: input
+    id: version
+    attributes:
+      label: Mod version
+      description: Shown at the bottom left of the title screen, e.g. 0.51.
+      placeholder: "0.51"
+    validations:
+      required: true
+  - type: dropdown
+    id: game
+    attributes:
+      label: GTA San Andreas version
+      options:
+        - 1.0 US (gta_sa.exe 14,383,616 bytes)
+        - Downgraded Steam / Rockstar Launcher version
+        - Other / not sure
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened?
+      description: What did you do, what happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Start a new world
+        2. Dig into the road next to Grove Street
+        3. ...
+  - type: textarea
+    id: log
+    attributes:
+      label: MinecraftSA.log
+      description: Attach `MinecraftSA/MinecraftSA.log` from the game folder, taken right after the problem (before starting the game again).
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Drag and drop images here, especially for visual problems.
+  - type: input
+    id: other-mods
+    attributes:
+      label: Other mods installed
+      placeholder: "e.g. SilentPatch, Widescreen Fix"
