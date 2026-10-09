@@ -29,7 +29,7 @@ struct TabPos {
 };
 extern const TabPos kTabPos[];
 extern const uint16_t kTabIcons[];
-extern const char* const kTabNames[];
+const char* TabName(int tab); // in the current language
 
 void BuildSlots(); // for gGame.screen
 UiSlot* SlotAt(float gx, float gy);

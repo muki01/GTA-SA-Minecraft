@@ -33,42 +33,43 @@ struct Want {
     int count; // for one emerald
 };
 struct Profession {
-    const char* name;
+    int name; // STR_*
     Offer sells[5];
     int numSells;
     Want buys[4];
     int numBuys;
 };
 const Profession kProfessions[6] = {
-    { "İşsiz Köylü", {}, 0, {}, 0 },
-    { "Çiftçi",
+    { STR_VILLAGER, {}, 0, {}, 0 },
+    { STR_FARMER,
       { { ID_BREAD, 6, 1 }, { ID_APPLE, 4, 1 }, { ID_PUMPKIN_PIE, 4, 1 }, { ID_GOLDEN_CARROT, 3, 3 } }, 4,
       { { ID_WHEAT, 20 }, { ID_CARROT, 22 }, { ID_POTATO, 26 }, { ID_BEETROOT, 15 } }, 4 },
-    { "Kütüphaneci",
+    { STR_LIBRARIAN,
       { { ID_BOOK, 1, 1 }, { ID_GLASS, 4, 1 }, { ID_BOOKSHELF, 1, 9 }, { ID_EXPERIENCE_BOTTLE, 1, 3 } }, 4,
       { { ID_PAPER, 24 }, { ID_INK_SAC, 5 } }, 2 },
-    { "Kasap",
+    { STR_BUTCHER,
       { { ID_COOKED_PORKCHOP, 5, 1 }, { ID_COOKED_CHICKEN, 8, 1 }, { ID_COOKED_BEEF, 5, 1 }, { ID_RABBIT_STEW, 1, 1 } }, 4,
       { { ID_CHICKEN, 14 }, { ID_PORKCHOP, 7 }, { ID_BEEF, 10 }, { ID_MUTTON, 7 } }, 4 },
-    { "Rahip",
+    { STR_CLERIC,
       { { ID_REDSTONE, 2, 1 }, { ID_LAPIS_LAZULI, 1, 1 }, { ID_GLOWSTONE, 1, 4 }, { ID_ENDER_PEARL, 1, 5 },
         { ID_EXPERIENCE_BOTTLE, 1, 3 } }, 5,
       { { ID_ROTTEN_FLESH, 32 }, { ID_GOLD_INGOT, 3 } }, 2 },
-    { "Zırhçı",
+    { STR_ARMORER,
       { { ID_IRON_HELMET, 1, 5 }, { ID_IRON_CHESTPLATE, 1, 9 }, { ID_IRON_LEGGINGS, 1, 7 }, { ID_IRON_BOOTS, 1, 4 },
         { ID_DIAMOND_CHESTPLATE, 1, 21 } }, 5,
       { { ID_COAL, 15 }, { ID_IRON_INGOT, 4 }, { ID_DIAMOND, 1 } }, 3 },
 };
 
 std::string OfferText(const Profession& pr, int offer) {
-    std::string s = std::string(pr.name) + ": ";
+    std::string s = std::string(LangStr(pr.name)) + ": ";
+    const std::string emerald = ItemName(ID_EMERALD);
     if (pr.numSells > 0) {
         const Offer& o = pr.sells[((offer % pr.numSells) + pr.numSells) % pr.numSells];
-        s += std::to_string(o.price) + " Zümrüt -> " + std::to_string(o.count) + " " + ItemName(o.item);
+        s += std::to_string(o.price) + " " + emerald + " -> " + std::to_string(o.count) + " " + ItemName(o.item);
     }
     if (pr.numBuys > 0) {
         const Want& w = pr.buys[((offer % pr.numBuys) + pr.numBuys) % pr.numBuys];
-        s += "  |  " + std::to_string(w.count) + " " + ItemName(w.item) + " -> 1 Zümrüt";
+        s += "  |  " + std::to_string(w.count) + " " + ItemName(w.item) + " -> 1 " + emerald;
     }
     return s;
 }
@@ -164,7 +165,7 @@ void VillagerTrade(int profession, int& offer, const Vec3& head) {
     StartSwing();
     if (pr.numSells == 0 && pr.numBuys == 0) {
         PlaySfx(SND_VILLAGER_NO, &head);
-        ShowMessage(std::string(pr.name) + ": bu köylünün mesleği yok");
+        ShowMessage(std::string(LangStr(pr.name)) + Tr(": this villager has no profession", ": bu köylünün mesleği yok"));
         return;
     }
     ItemStack& held = gInv.Held();
@@ -175,14 +176,14 @@ void VillagerTrade(int profession, int& offer, const Vec3& head) {
             continue;
         if (gInv.CountOf(w.item) < w.count) {
             PlaySfx(SND_VILLAGER_NO, &head);
-            ShowMessage(std::string(pr.name) + ": " + std::to_string(w.count) + " " + ItemName(w.item) + " gerekli");
+            ShowMessage(std::string(LangStr(pr.name)) + ": " + std::to_string(w.count) + " " + ItemName(w.item) + Tr(" needed", " gerekli"));
             return;
         }
         gInv.Remove(w.item, w.count);
         GiveOrDrop(ID_EMERALD, 1);
         PlaySfx(SND_VILLAGER_TRADE, &head);
         HappyParticles(head);
-        ShowMessage(std::string("Sattın: ") + std::to_string(w.count) + " " + ItemName(w.item) + " -> 1 Zümrüt");
+        ShowMessage(std::string(Tr("Sold: ", "Sattın: ")) + std::to_string(w.count) + " " + ItemName(w.item) + " -> 1 " + ItemName(ID_EMERALD));
         gWorld.dirty = true;
         return;
     }
@@ -191,7 +192,7 @@ void VillagerTrade(int profession, int& offer, const Vec3& head) {
         const Offer& o = pr.sells[((offer % pr.numSells) + pr.numSells) % pr.numSells];
         if (gGame.gameMode != MODE_CREATIVE && gInv.CountOf(ID_EMERALD) < o.price) {
             PlaySfx(SND_VILLAGER_NO, &head);
-            ShowMessage(std::string(pr.name) + ": " + std::to_string(o.price) + " Zümrüt gerekli");
+            ShowMessage(std::string(LangStr(pr.name)) + ": " + std::to_string(o.price) + " " + ItemName(ID_EMERALD) + Tr(" needed", " gerekli"));
             return;
         }
         if (gGame.gameMode != MODE_CREATIVE)
@@ -199,7 +200,7 @@ void VillagerTrade(int profession, int& offer, const Vec3& head) {
         GiveOrDrop(o.item, o.count);
         PlaySfx(SND_VILLAGER_TRADE, &head);
         HappyParticles(head);
-        ShowMessage(std::string("Aldın: ") + std::to_string(o.count) + " " + ItemName(o.item));
+        ShowMessage(std::string(Tr("Bought: ", "Aldın: ")) + std::to_string(o.count) + " " + ItemName(o.item));
         gWorld.dirty = true;
         return;
     }

@@ -13,11 +13,12 @@ namespace mc {
 std::vector<UiSlot> gSlots;
 int gWinW = 176, gWinH = 166;
 
-const char* const kTabNames[CAT_COUNT + 1] = {
-    "Yap\xC4\xB1 Bloklar\xC4\xB1", "Renkli Bloklar", "Do\xC4\x9F" "al Bloklar", "\xC4\xB0\xC5\x9Flevsel Bloklar",
-    "Ara\xC3\xA7lar ve Gere\xC3\xA7ler", "Sava\xC5\x9F", "Yiyecek ve \xC4\xB0\xC3\xA7" "ecekler", "Malzemeler",
-    "Redstone Bloklar\xC4\xB1", "\xC3\x87" "a\xC4\x9F\xC4\xB1rma Yumurtalar\xC4\xB1", "Hayatta Kalma Envanteri",
-};
+namespace {
+const int kTabTitles[CAT_COUNT + 1] = { STR_TAB_BUILDING, STR_TAB_COLORED, STR_TAB_NATURAL, STR_TAB_FUNCTIONAL, STR_TAB_TOOLS,
+                                        STR_TAB_COMBAT, STR_TAB_FOOD, STR_TAB_INGREDIENTS, STR_TAB_REDSTONE,
+                                        STR_TAB_SPAWN_EGGS, STR_TAB_INVENTORY };
+} // namespace
+const char* TabName(int tab) { return LangStr(kTabTitles[std::clamp(tab, 0, (int)CAT_COUNT)]); }
 const uint16_t kTabIcons[CAT_COUNT + 1] = { ID_BRICKS, ID_CYAN_WOOL, ID_GRASS_BLOCK, ID_CRAFTING_TABLE, ID_DIAMOND_PICKAXE,
                                             ID_DIAMOND_SWORD, ID_GOLDEN_APPLE, ID_IRON_INGOT, ID_REDSTONE, ID_PIG_SPAWN_EGG,
                                             ID_CHEST };
@@ -411,11 +412,11 @@ bool OverWindow(float gx, float gy) { return gx >= 0.0f && gy >= 0.0f && gx < gW
 
 const char* ScreenTitle() {
     switch (gGame.screen) {
-    case SCREEN_INVENTORY: return "\xC3\x9Cretim";
-    case SCREEN_CRAFTING: return Block(ID_CRAFTING_TABLE).name;
-    case SCREEN_FURNACE: return Block(gWorld.GetBlock(gGame.openPos.x, gGame.openPos.y, gGame.openPos.z)).name;
-    case SCREEN_CHEST: return Block(ID_CHEST).name;
-    case SCREEN_CREATIVE: return kTabNames[std::clamp(gGame.creativeTab, 0, (int)CAT_COUNT)];
+    case SCREEN_INVENTORY: return LangStr(STR_CRAFTING);
+    case SCREEN_CRAFTING: return BlockName(ID_CRAFTING_TABLE);
+    case SCREEN_FURNACE: return BlockName(gWorld.GetBlock(gGame.openPos.x, gGame.openPos.y, gGame.openPos.z));
+    case SCREEN_CHEST: return BlockName(ID_CHEST);
+    case SCREEN_CREATIVE: return TabName(gGame.creativeTab);
     }
     return "";
 }

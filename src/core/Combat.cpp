@@ -688,7 +688,7 @@ bool UseHeldItem() {
     case SP_BOAT: {
         Vec3 water;
         if (inVehicle || !LookAtWater(8.0f, &water)) {
-            ShowMessage("Tekneyi suya koymalısın");
+            ShowMessage(Tr("A boat has to go on water", "Tekneyi suya koymalısın"));
             return true;
         }
         if (!TheHost().PlaceVehicle(HOST_BOAT, water + Vec3(0, 0, 0.6f), LookHeadingDeg()))

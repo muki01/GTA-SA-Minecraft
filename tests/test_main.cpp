@@ -3028,7 +3028,7 @@ static void TestVillagers() {
         CHECK(gInv.CountOf(ID_GOLDEN_CARROT) == 3 && gInv.CountOf(ID_EMERALD) == 1, "in creative one is enough, and it stays");
         gInv.Held() = Stack(ID_DIRT, 1);
         VillagerTrade(1, offer, head);
-        CHECK(offer == 4 && Heard(SND_VILLAGER_YES) == 1 && gGame.message.find("Zümrüt") != std::string::npos, "anything else: the next offer");
+        CHECK(offer == 4 && Heard(SND_VILLAGER_YES) == 1 && gGame.message.find(ItemName(ID_EMERALD)) != std::string::npos, "anything else: the next offer");
         offer = 59;
         VillagerTrade(1, offer, head);
         CHECK(offer == 0, "the offers go round");
@@ -3424,7 +3424,7 @@ static void TestScreens() {
         CHECK(SlotAt(16, 150) && SlotAt(16, 150)->st == &gInv.slots[0] && SlotAt(16, 92)->st == &gInv.slots[9] && !SlotAt(3, 3),
               "where the slots are");
         CHECK(OverWindow(1, 1) && !OverWindow(-1, 5) && !OverWindow(5, 170) && TabAt(5, -10) == -1, "the window; no tabs here");
-        CHECK(std::string(ScreenTitle()) == "\xC3\x9Cretim", "its title");
+        CHECK(std::string(ScreenTitle()) == "Crafting", "its title");
 
         gInv.slots[0] = Stack(ID_DIRT, 10);
         ClickAt(8, 142);
@@ -3577,7 +3577,7 @@ static void TestScreens() {
         ScreenClick(x + 3, y + 3, true, false, false);
         CHECK(gGame.creativeTab == CAT_COUNT && gGame.creativeScroll == 0 && Heard(SND_CLICK) == 1 && CreativeInventoryTab(), "a click picks a tab");
         BuildSlots();
-        CHECK(gSlots.size() == 27 + 4 + 1 + 1 + 9 && std::string(ScreenTitle()) == kTabNames[CAT_COUNT], "there the whole inventory, and the trash");
+        CHECK(gSlots.size() == 27 + 4 + 1 + 1 + 9 && std::string(ScreenTitle()) == TabName(CAT_COUNT), "there the whole inventory, and the trash");
         gGame.creativeScroll = 0;
         ScreenScroll(2);
         CHECK(gGame.creativeScroll == 0, "the wheel does nothing there");
@@ -3692,7 +3692,7 @@ static void TestHud() {
         CHECK(name && name->y == -59.0f && name->align == 1 && (name->color >> 24) == 127, "the held item's name fades");
         const HudPiece* ebg = FindSprite(v, GUI_EFFECT_BG);
         CHECK(CountSprites(v, GUI_EFFECT_BG) == 2 && ebg->anchor == AT_TOP_RIGHT && ebg->x == -25.0f && ebg->y == 1.0f, "two effects, top right");
-        const HudPiece* poison = FindText(v, kEffectNames[EFFECT_POISON]);
+        const HudPiece* poison = FindText(v, EffectName(EFFECT_POISON));
         CHECK(poison && poison->align == 2 && poison->y == 27.0f + 3.0f && FindText(v, "0:30") && FindText(v, "0:30")->y == 1.0f + 13.0f,
               "their names and time left");
 
@@ -3786,7 +3786,7 @@ static void TestHud() {
         BuildSlots();
         v.clear();
         BuildHud(f, v);
-        CHECK(FindSprite(v, GUI_WIN_BLAST) && FindText(v, "Envanter") && FindText(v, "Envanter")->y == 72.0f, "a blast furnace has its own window");
+        CHECK(FindSprite(v, GUI_WIN_BLAST) && FindText(v, "Inventory") && FindText(v, "Inventory")->y == 72.0f, "a blast furnace has its own window");
         const HudPiece* lit = nullptr;
         const HudPiece* arrow = nullptr;
         for (const HudPiece& p : v) {
@@ -3809,7 +3809,7 @@ static void TestHud() {
         CHECK(CountKind(v, HP_ICON) == CAT_COUNT + 1 && FindSprite(v, GUI_TAB_TOP_SELECTED_1) && CountSprites(v, GUI_TAB_TOP_UNSELECTED_1) == 0,
               "creative: every tab with its icon, the first one picked");
         CHECK(CountSprites(v, GUI_SCROLLER) == 1 && FindSprite(v, GUI_SCROLLER)->y == 18.0f, "the scroller at the top");
-        CHECK(CountKind(v, HP_TOOLTIP) == 1 && v.back().text == kTabNames[0], "the tab under the mouse says its name");
+        CHECK(CountKind(v, HP_TOOLTIP) == 1 && v.back().text == TabName(0), "the tab under the mouse says its name");
         CloseScreen();
     }
 
@@ -3829,17 +3829,17 @@ static void TestHud() {
             if (p.kind == HP_GRADIENT)
                 veil = &p;
         CHECK(veil && veil->scale == 0.5f && veil->color == 0x60500000u && veil->color2 == 0xA0803030u, "a red veil fades in");
-        const HudPiece* title = FindText(v, kStr[STR_YOU_DIED]);
+        const HudPiece* title = FindText(v, LangStr(STR_YOU_DIED));
         CHECK(title && title->scale == 2.0f && title->y == 60.0f, "\"You died!\" twice as big");
         CHECK(FindText(v, "CJ") && FindText(v, "CJ")->y == 85.0f, "the cause, with the player's name");
-        const HudPiece* score = FindText(v, std::string(kStr[STR_SCORE]).substr(0, 3));
+        const HudPiece* score = FindText(v, std::string(LangStr(STR_SCORE)).substr(0, 3));
         CHECK(score && score->text2 == "42" && score->text.find("%s") == std::string::npos, "the score");
-        CHECK(!FindText(v, kStr[STR_RESPAWN]), "no button yet");
+        CHECK(!FindText(v, LangStr(STR_RESPAWN)), "no button yet");
         gGame.deathTime = 1.5f;
         v.clear();
         BuildHud(f, v);
         const HudPiece* button = FindSprite(v, MENU_BUTTON_HI);
-        CHECK(button && button->texture == HT_MENU && button->anchor == AT_QUARTER && FindText(v, kStr[STR_RESPAWN]), "after a second the button");
+        CHECK(button && button->texture == HT_MENU && button->anchor == AT_QUARTER && FindText(v, LangStr(STR_RESPAWN)), "after a second the button");
     }
     gGame = GameState();
     ResetSurvival();
@@ -4638,13 +4638,13 @@ static void TestBeds() {
         gSleep = SleepState();
         host.hours = 13.0f;
         CHECK(UseBed(Int3{ 4, 0, 10 }) && !gSleep.asleep && gSleep.spawnSet && gSleep.spawn == (Int3{ 3, 0, 10 }) &&
-                  gGame.message.find("geceleri") != std::string::npos,
+                  gGame.message == LangStr(STR_NO_SLEEP),
               "by day: no sleep, but the bed is the respawn point");
         CHECK(!UseBed(Int3{ 5, 0, 10 }), "no bed there");
         host.hours = 23.5f;
         gGame.gameMode = MODE_SURVIVAL;
         int c = SpawnMob(MOB_CREEPER, Vec3(8.5f, 0.5f, 10.0f), true);
-        CHECK(UseBed(Int3{ 3, 0, 10 }) && !gSleep.asleep && gGame.message.find("canavar") != std::string::npos, "a creeper near: no rest");
+        CHECK(UseBed(Int3{ 3, 0, 10 }) && !gSleep.asleep && gGame.message == LangStr(STR_NOT_SAFE), "a creeper near: no rest");
         gMobs[c].pos = Vec3(30.5f, 0.5f, 10.0f);
         UseBed(Int3{ 3, 0, 10 });
         Vec3 spot, feet, head;
@@ -4667,7 +4667,7 @@ static void TestBeds() {
         CHECK(host.moves == 1 && host.player.x == 4.0f && host.player.z == 11.0f + 9.0f / 16.0f, "dying, he comes back at his bed");
         gWorld.SetRaw(4, 0, 10, MakeVox(ID_AIR));
         BedRespawn();
-        CHECK(host.moves == 1 && !gSleep.spawnSet && gGame.message.find("Yatağın yok") != std::string::npos, "unless it is gone");
+        CHECK(host.moves == 1 && !gSleep.spawnSet && gGame.message == LangStr(STR_NO_SPAWN), "unless it is gone");
     }
     gSleep = SleepState();
     gWorld.Clear();
@@ -4741,6 +4741,21 @@ static void TestWarden() {
     SetModelSink(nullptr);
     MobsClear();
     gWorld.Clear();
+}
+
+static void TestLanguage() {
+    CHECK(gLanguage == LANG_EN && std::string(ItemName(ID_STONE)) == "Stone" && std::string(LangStr(STR_SINGLEPLAYER)) == "Singleplayer" &&
+              std::string(TabName(CAT_BUILDING)) == "Building Blocks" && std::string(LangStr(STR_NO_SLEEP)).find("night") != std::string::npos,
+          "English by default, as Minecraft starts");
+    gLanguage = LANG_TR;
+    CHECK(std::string(ItemName(ID_STONE)) == "Taş" && std::string(BlockName(ID_CRAFTING_TABLE)) == "Çalışma Masası" &&
+              std::string(TabName(CAT_BUILDING)) == "İnşaat Blokları" && std::string(EffectName(EFFECT_POISON)) == "Zehir" &&
+              std::string(Tr("a", "b")) == "b",
+          "in Turkish: everything Minecraft says changes");
+    gLanguage = LANG_EN;
+    CHECK(LanguageFromCode("tr") == LANG_TR && LanguageFromCode("xx") == LANG_EN && std::string(LanguageCode(LANG_TR)) == "tr" &&
+              std::string(LanguageName(LANG_TR)).find("Türkçe") == 0,
+          "the language codes of the ini, the names of the list");
 }
 
 static void TestSave() {
@@ -5048,6 +5063,7 @@ int main(int argc, char** argv) {
     TestShapes();
     TestBeds();
     TestWarden();
+    TestLanguage();
     TestModels();
     TestPlayerAnim();
     TestRenderers();

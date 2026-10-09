@@ -2,6 +2,8 @@
 #pragma once
 #include <cstdint>
 
+#include "../Lang.h"
+
 namespace mc {
 
 constexpr int ATLAS_SIZE = 1024;
@@ -215,7 +217,10 @@ constexpr uint32_t kBlockColor[697] = {
 
 enum Effect : uint8_t { EFFECT_ABSORPTION, EFFECT_REGENERATION, EFFECT_FIRE_RESISTANCE, EFFECT_RESISTANCE, EFFECT_HUNGER, EFFECT_POISON, EFFECT_COUNT };
 constexpr GuiRect kEffectIcons[EFFECT_COUNT] = { GUI_EFFECT_ABSORPTION, GUI_EFFECT_REGENERATION, GUI_EFFECT_FIRE_RESISTANCE, GUI_EFFECT_RESISTANCE, GUI_EFFECT_HUNGER, GUI_EFFECT_POISON };
-inline const char* const kEffectNames[EFFECT_COUNT] = { "Emilim", "Yenilenme", "Ate\xC5\x9F Direnci", "Diren\xC3\xA7", "A\xC3\xA7l\xC4\xB1k", "Zehir" };
+inline const char* const kEffectNames[LANG_COUNT][EFFECT_COUNT] = {
+    { "Absorption", "Regeneration", "Fire Resistance", "Resistance", "Hunger", "Poison" },
+    { "Emilim", "Yenilenme", "Ate\xC5\x9F Direnci", "Diren\xC3\xA7", "A\xC3\xA7l\xC4\xB1k", "Zehir" } };
+inline const char* EffectName(int e) { return kEffectNames[gLanguage][e]; }
 
 constexpr int FONT_COLS = 32;
 constexpr int FONT_ROWS = 16;
@@ -440,38 +445,127 @@ constexpr GuiRect MENU_FOOTER_SEP = { 760, 264, 32, 2 };
 constexpr GuiRect MENU_JOIN = { 800, 258, 32, 32 };
 constexpr GuiRect MENU_JOIN_HI = { 836, 258, 32, 32 };
 constexpr GuiRect MENU_PACK = { 872, 258, 32, 32 };
-enum Str { STR_SINGLEPLAYER, STR_OPTIONS, STR_QUIT, STR_SELECT_WORLD, STR_PLAY_WORLD, STR_CREATE_WORLD, STR_DELETE, STR_CANCEL, STR_BACK, STR_RETURN_TO_GAME, STR_GAME_MENU, STR_STATS, STR_SURVIVAL, STR_CREATIVE, STR_NEW_WORLD, STR_DELETE_QUESTION, STR_DELETE_WARNING, STR_YOU_DIED, STR_RESPAWN, STR_TITLE_SCREEN, STR_SCORE, STR_DEATH_GENERIC, STR_DEATH_DROWN, STR_DEATH_LAVA, STR_DEATH_FALL, STR_DEATH_FIRE, STR_DEATH_EXPLOSION, STR_DEATH_STARVE, STR_WORLDS, STR_COUNT };
-inline const char* const kStr[STR_COUNT] = {
-    "Tek Oyunculu",
-    "Ayarlar...",
-    "Oyundan \xC3\x87\xC4\xB1k",
-    "D\xC3\xBCnya Se\xC3\xA7",
-    "Se\xC3\xA7ilen d\xC3\xBCnyada oyna",
-    "Yeni D\xC3\xBCnya Olu\xC5\x9Ftur",
-    "Sil",
-    "\xC4\xB0ptal",
-    "Geri",
-    "Oyuna D\xC3\xB6n",
-    "Oyun men\xC3\xBCs\xC3\xBC",
-    "\xC4\xB0statistikler",
-    "Hayatta Kalma Modu",
-    "Yarat\xC4\xB1" "c\xC4\xB1 Mod",
-    "Yeni D\xC3\xBCnya",
-    "Bu d\xC3\xBCnyay\xC4\xB1 silmek istedi\xC4\x9Finizden emin misiniz?",
-    "'%s' sonsuza kadar kaybolacak! (Uzun bir s\xC3\xBCre!)",
-    "\xC3\x96ld\xC3\xBCn!",
-    "Yeniden Canlan",
-    "Ana Men\xC3\xBC",
-    "Puan: %s",
-    "%1$s \xC3\xB6ld\xC3\xBC",
-    "%1$s bo\xC4\x9Fuldu",
-    "%1$s lavda y\xC3\xBCzmeye \xC3\xA7" "al\xC4\xB1\xC5\x9Ft\xC4\xB1",
-    "%1$s yere \xC3\xA7ok sert d\xC3\xBC\xC5\x9F" "erek \xC3\xB6ld\xC3\xBC",
-    "%1$s yanarak \xC3\xB6ld\xC3\xBC",
-    "%1$s havaya u\xC3\xA7tu",
-    "%1$s a\xC3\xA7l\xC4\xB1ktan \xC3\xB6ld\xC3\xBC",
-    "D\xC3\xBCnya",
+enum Str { STR_SINGLEPLAYER, STR_OPTIONS, STR_QUIT, STR_SELECT_WORLD, STR_PLAY_WORLD, STR_CREATE_WORLD, STR_DELETE, STR_CANCEL, STR_BACK, STR_RETURN_TO_GAME, STR_GAME_MENU, STR_STATS, STR_SURVIVAL, STR_CREATIVE, STR_NEW_WORLD, STR_DELETE_QUESTION, STR_DELETE_WARNING, STR_YOU_DIED, STR_RESPAWN, STR_TITLE_SCREEN, STR_SCORE, STR_DEATH_GENERIC, STR_DEATH_DROWN, STR_DEATH_LAVA, STR_DEATH_FALL, STR_DEATH_FIRE, STR_DEATH_EXPLOSION, STR_DEATH_STARVE, STR_WORLDS, STR_LANGUAGE, STR_LANGUAGE_TITLE, STR_DONE, STR_SET_SPAWN, STR_NO_SLEEP, STR_NOT_SAFE, STR_NO_SPAWN, STR_GAMEMODE_SET, STR_CRAFTING, STR_INVENTORY, STR_TAB_BUILDING, STR_TAB_COLORED, STR_TAB_NATURAL, STR_TAB_FUNCTIONAL, STR_TAB_TOOLS, STR_TAB_COMBAT, STR_TAB_FOOD, STR_TAB_INGREDIENTS, STR_TAB_REDSTONE, STR_TAB_SPAWN_EGGS, STR_TAB_INVENTORY, STR_VILLAGER, STR_FARMER, STR_LIBRARIAN, STR_BUTCHER, STR_CLERIC, STR_ARMORER, STR_COUNT };
+// [language][text]: English, Turkish
+inline const char* const kStrs[LANG_COUNT][STR_COUNT] = {
+    {
+        "Singleplayer",
+        "Options...",
+        "Quit Game",
+        "Select World",
+        "Play Selected World",
+        "Create New World",
+        "Delete",
+        "Cancel",
+        "Back",
+        "Back to Game",
+        "Game Menu",
+        "Statistics",
+        "Survival Mode",
+        "Creative Mode",
+        "New World",
+        "Are you sure you want to delete this world?",
+        "'%s' will be lost forever! (A long time!)",
+        "You Died!",
+        "Respawn",
+        "Title Screen",
+        "Score: %s",
+        "%1$s died",
+        "%1$s drowned",
+        "%1$s tried to swim in lava",
+        "%1$s hit the ground too hard",
+        "%1$s burned to death",
+        "%1$s blew up",
+        "%1$s starved to death",
+        "World",
+        "Language...",
+        "Language",
+        "Done",
+        "Respawn point set",
+        "You can sleep only at night or during thunderstorms",
+        "You may not rest now; there are monsters nearby",
+        "You have no home bed or charged respawn anchor, or it was obstructed",
+        "Set own game mode to %s",
+        "Crafting",
+        "Inventory",
+        "Building Blocks",
+        "Colored Blocks",
+        "Natural Blocks",
+        "Functional Blocks",
+        "Tools & Utilities",
+        "Combat",
+        "Food & Drinks",
+        "Ingredients",
+        "Redstone Blocks",
+        "Spawn Eggs",
+        "Survival Inventory",
+        "Villager",
+        "Farmer",
+        "Librarian",
+        "Butcher",
+        "Cleric",
+        "Armorer",
+    },
+    {
+        "Tek Oyunculu",
+        "Ayarlar...",
+        "Oyundan \xC3\x87\xC4\xB1k",
+        "D\xC3\xBCnya Se\xC3\xA7",
+        "Se\xC3\xA7ilen d\xC3\xBCnyada oyna",
+        "Yeni D\xC3\xBCnya Olu\xC5\x9Ftur",
+        "Sil",
+        "\xC4\xB0ptal",
+        "Geri",
+        "Oyuna D\xC3\xB6n",
+        "Oyun men\xC3\xBCs\xC3\xBC",
+        "\xC4\xB0statistikler",
+        "Hayatta Kalma Modu",
+        "Yarat\xC4\xB1" "c\xC4\xB1 Mod",
+        "Yeni D\xC3\xBCnya",
+        "Bu d\xC3\xBCnyay\xC4\xB1 silmek istedi\xC4\x9Finizden emin misiniz?",
+        "'%s' sonsuza kadar kaybolacak! (Uzun bir s\xC3\xBCre!)",
+        "\xC3\x96ld\xC3\xBCn!",
+        "Yeniden Canlan",
+        "Ana Men\xC3\xBC",
+        "Puan: %s",
+        "%1$s \xC3\xB6ld\xC3\xBC",
+        "%1$s bo\xC4\x9Fuldu",
+        "%1$s lavda y\xC3\xBCzmeye \xC3\xA7" "al\xC4\xB1\xC5\x9Ft\xC4\xB1",
+        "%1$s yere \xC3\xA7ok sert d\xC3\xBC\xC5\x9F" "erek \xC3\xB6ld\xC3\xBC",
+        "%1$s yanarak \xC3\xB6ld\xC3\xBC",
+        "%1$s havaya u\xC3\xA7tu",
+        "%1$s a\xC3\xA7l\xC4\xB1ktan \xC3\xB6ld\xC3\xBC",
+        "D\xC3\xBCnya",
+        "Dil...",
+        "Dil",
+        "Bitti",
+        "Yeniden canlanma noktas\xC4\xB1 ayarland\xC4\xB1",
+        "Sadece geceleri veya f\xC4\xB1rt\xC4\xB1nal\xC4\xB1 havalarda uyuyabilirsin",
+        "\xC5\x9Eu an yatamazs\xC4\xB1n\xC4\xB1z, yak\xC4\xB1n\xC4\xB1n\xC4\xB1zda canavarlar var",
+        "Yata\xC4\x9F\xC4\xB1n\xC4\xB1z veya y\xC3\xBCklenmi\xC5\x9F bir dirilticiniz yok veya s\xC4\xB1k\xC4\xB1\xC5\x9Fm\xC4\xB1\xC5\x9F",
+        "Oyun modunuz %s olarak ayarland\xC4\xB1",
+        "\xC3\x9Cretim",
+        "Envanter",
+        "\xC4\xB0n\xC5\x9F" "aat Bloklar\xC4\xB1",
+        "Renkli Bloklar",
+        "Do\xC4\x9F" "al Bloklar",
+        "\xC4\xB0\xC5\x9Flevsel Bloklar",
+        "Aletler ve Ara\xC3\xA7lar",
+        "Sald\xC4\xB1r\xC4\xB1",
+        "Yiyecek ve \xC4\xB0\xC3\xA7" "ecekler",
+        "Malzemeler",
+        "Redstone Bloklar\xC4\xB1",
+        "\xC3\x87" "a\xC4\x9F\xC4\xB1rma Yumurtalar\xC4\xB1",
+        "Hayatta Kalma Envanteri",
+        "K\xC3\xB6yl\xC3\xBC",
+        "\xC3\x87ift\xC3\xA7i",
+        "K\xC3\xBCt\xC3\xBCphaneci",
+        "Kasap",
+        "Rahip",
+        "Z\xC4\xB1rh\xC3\xA7\xC4\xB1",
+    },
 };
+inline const char* LangStr(int s) { return kStrs[gLanguage][s]; }
 
 // entity.png layout
 constexpr int ENT_TEX_W = 512, ENT_TEX_H = 512;

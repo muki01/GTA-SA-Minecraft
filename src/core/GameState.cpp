@@ -49,7 +49,7 @@ void DamageHeldItem(int amount) {
         return;
     h.damage += (uint16_t)amount;
     if (h.damage >= d.durability) {
-        ShowMessage(std::string(d.name) + " k\xC4\xB1r\xC4\xB1ld\xC4\xB1!", 1.5f);
+        ShowMessage(std::string(d.name[gLanguage]) + Tr(" broke!", " kırıldı!"), 1.5f);
         PlaySfx(SND_TOOL_BREAK);
         h.Clear();
     }

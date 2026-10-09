@@ -27,7 +27,8 @@ const ItemDef& Item(int id) {
             ItemDef& d = blockItems[b];
             d = {};
             d.key = kBlockDefs[b].key;
-            d.name = kBlockDefs[b].name;
+            d.name[LANG_EN] = kBlockDefs[b].name[LANG_EN];
+            d.name[LANG_TR] = kBlockDefs[b].name[LANG_TR];
             d.tile = kBlockDefs[b].tex[FACE_SOUTH];
             d.maxStack = 64;
             d.speed = 1.0f;
@@ -44,7 +45,8 @@ const ItemDef& Item(int id) {
     return blockItems[0];
 }
 
-const char* ItemName(int id) { return Item(id).name; }
+const char* ItemName(int id) { return Item(id).name[gLanguage]; }
+const char* BlockName(int id) { return Block(id).name[gLanguage]; }
 
 namespace {
 struct BlockFlags {

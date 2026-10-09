@@ -119,7 +119,7 @@ void Magic(const CVector& at, int count, float speed) {
 bool WandAllowed() {
     if (gGame.gameMode == MODE_CREATIVE)
         return true;
-    ShowMessage("Büyülü Sopa sadece Yaratıcı modda çalışır");
+    ShowMessage(Tr("The Debug Stick only works in Creative mode", "Büyülü Sopa sadece Yaratıcı modda çalışır"));
     return false;
 }
 

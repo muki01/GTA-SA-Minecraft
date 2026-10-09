@@ -25,7 +25,7 @@ enum : int {
     SCR_STATS = 0, SCR_START_GAME = 1, SCR_MAP = 5, SCR_LOAD_GAME = 9, SCR_DELETE_GAME = 10, SCR_LOAD_FIRST_SAVE = 13,
     SCR_DELETE_FINISHED = 14, SCR_OPTIONS = 33, SCR_MAIN_MENU = 34, SCR_QUIT_ASK = 35, SCR_PAUSE = 41
 };
-enum Page { PAGE_HOME, PAGE_WORLDS, PAGE_DELETE };
+enum Page { PAGE_HOME, PAGE_WORLDS, PAGE_DELETE, PAGE_LANGUAGE };
 
 SafetyHookInline gDrawHook, gInputHook, gSaveHook, gDeleteHook;
 Page gPage = PAGE_HOME;
@@ -153,51 +153,57 @@ void TitlePage() {
     ui::Image(gMenuTex, MENU_LOGO, cx - lw * 0.5f, ly, cx + lw * 0.5f, ly + lh);
     ui::Linear(false);
     // splash text, like the yellow one next to Minecraft's logo
-    ui::LabelCentered("Minecraft modu!", cx + 100.0f * s, ly + 58.0f * s, s, ui::Color(255, 255, 0));
+    ui::LabelCentered(Tr("Minecraft mod!", "Minecraft modu!"), cx + 100.0f * s, ly + 58.0f * s, s, ui::Color(255, 255, 0));
 
     const float bw = 200.0f * s, x = cx - bw * 0.5f;
     float y = gF.H * 0.25f + 48.0f * s;
-    if (Button(kStr[STR_SINGLEPLAYER], x, y, bw)) {
+    if (Button(LangStr(STR_SINGLEPLAYER), x, y, bw)) {
         PopulateSlots();
         gPage = PAGE_WORLDS;
         gSelected = -1;
         gScroll = 0;
     }
     y += 24.0f * s;
-    if (Button(kStr[STR_OPTIONS], x, y, bw))
+    if (Button(LangStr(STR_OPTIONS), x, y, bw))
         Switch(SCR_OPTIONS);
     y += 24.0f * s;
-    if (Button(kStr[STR_QUIT], x, y, bw))
+    if (Button(LangStr(STR_LANGUAGE), x, y, bw))
+        gPage = PAGE_LANGUAGE;
+    y += 24.0f * s;
+    if (Button(LangStr(STR_QUIT), x, y, bw))
         Switch(SCR_QUIT_ASK);
-    ui::Label("GTA SA Minecraft 0.50", 2.0f * s, gF.H - 10.0f * s, s);
-    const char* right = "F10: GTA menüsü";
+    ui::Label("GTA SA Minecraft 0.51", 2.0f * s, gF.H - 10.0f * s, s);
+    const char* right = Tr("F10: GTA menu", "F10: GTA menüsü");
     ui::Label(right, gF.W - ui::TextW(right, s) - 2.0f * s, gF.H - 10.0f * s, s, ui::Color(200, 200, 200));
 }
 
 void PausePage() {
     const float s = gF.s, cx = gF.W * 0.5f;
     GtaBackground(SPR_BACK8);
-    ui::LabelCentered(kStr[STR_GAME_MENU], cx, 40.0f * s, s);
+    ui::LabelCentered(LangStr(STR_GAME_MENU), cx, 40.0f * s, s);
     const float bw = 204.0f * s, x = cx - bw * 0.5f, hw = 98.0f * s;
     float y = gF.H * 0.25f + 8.0f * s;
-    if (Button(kStr[STR_RETURN_TO_GAME], x, y, bw))
+    if (Button(LangStr(STR_RETURN_TO_GAME), x, y, bw))
         DontDrawFrontEnd();
     y += 24.0f * s;
-    if (Button(kStr[STR_STATS], x, y, hw))
+    if (Button(LangStr(STR_STATS), x, y, hw))
         Switch(SCR_STATS);
-    if (Button("Harita", x + bw - hw, y, hw))
+    if (Button(Tr("Map", "Harita"), x + bw - hw, y, hw))
         Switch(SCR_MAP);
     y += 24.0f * s;
-    if (Button(kStr[STR_OPTIONS], x, y, hw))
+    if (Button(LangStr(STR_OPTIONS), x, y, hw))
         Switch(SCR_OPTIONS);
-    if (Button(kStr[STR_SELECT_WORLD], x + bw - hw, y, hw)) {
+    if (Button(LangStr(STR_SELECT_WORLD), x + bw - hw, y, hw)) {
         PopulateSlots();
         gPage = PAGE_WORLDS;
         gSelected = -1;
         gScroll = 0;
     }
+    y += 24.0f * s;
+    if (Button(LangStr(STR_LANGUAGE), x, y, bw))
+        gPage = PAGE_LANGUAGE;
     y += 36.0f * s;
-    if (Button(kStr[STR_QUIT], x, y, bw))
+    if (Button(LangStr(STR_QUIT), x, y, bw))
         Switch(SCR_QUIT_ASK);
 }
 
@@ -208,7 +214,7 @@ void WorldsPage() {
     TiledDark(top, bottom, MENU_LIST_BG, 110);
     ui::Image(gMenuTex, MENU_HEADER_SEP, 0, top - 2.0f * s, W, top);
     ui::Image(gMenuTex, MENU_FOOTER_SEP, 0, bottom, W, bottom + 2.0f * s);
-    ui::LabelCentered(kStr[STR_SELECT_WORLD], cx, 12.0f * s, s);
+    ui::LabelCentered(LangStr(STR_SELECT_WORLD), cx, 12.0f * s, s);
 
     int slots[8], n = 0;
     for (int i = 0; i < 8; ++i)
@@ -258,7 +264,7 @@ void WorldsPage() {
         ui::Label(SlotName(slot).c_str(), x0 + 35.0f * s, y + 1.0f * s, s);
         snprintf(line, sizeof(line), "GTASAsf%d (%s)", slot + 1, SlotDate(slot).c_str());
         ui::Label(line, x0 + 35.0f * s, y + 12.0f * s, s, ui::Color(128, 128, 128), false);
-        snprintf(line, sizeof(line), "%s%s", kStr[STR_SURVIVAL], WorldFileExists(slot + 1) ? ", Minecraft dünyası kayıtlı" : "");
+        snprintf(line, sizeof(line), "%s%s", LangStr(STR_SURVIVAL), WorldFileExists(slot + 1) ? Tr(", Minecraft world saved", ", Minecraft dünyası kayıtlı") : "");
         ui::Label(line, x0 + 35.0f * s, y + 22.0f * s, s, ui::Color(128, 128, 128), false);
         if (hover && gF.click) {
             const DWORD now = GetTickCount();
@@ -271,7 +277,7 @@ void WorldsPage() {
         }
     }
     if (n == 0)
-        ui::LabelCentered("Kayıtlı dünya yok", cx, (top + bottom) * 0.5f - 4.0f * s, s, ui::Color(170, 170, 170));
+        ui::LabelCentered(Tr("No saved worlds", "Kayıtlı dünya yok"), cx, (top + bottom) * 0.5f - 4.0f * s, s, ui::Color(170, 170, 170));
     if (n > visible) {
         // scroll bar
         const float bx = x0 + rowW + 8.0f * s, bh = bottom - top;
@@ -282,13 +288,13 @@ void WorldsPage() {
 
     const float bw = 150.0f * s;
     const bool have = gSelected >= 0 && SlotFilled(gSelected);
-    if (Button(kStr[STR_PLAY_WORLD], cx - 154.0f * s, H - 52.0f * s, bw, have) || (have && KeyPressed(VK_RETURN)))
+    if (Button(LangStr(STR_PLAY_WORLD), cx - 154.0f * s, H - 52.0f * s, bw, have) || (have && KeyPressed(VK_RETURN)))
         play = true;
-    if (Button(kStr[STR_CREATE_WORLD], cx + 4.0f * s, H - 52.0f * s, bw))
+    if (Button(LangStr(STR_CREATE_WORLD), cx + 4.0f * s, H - 52.0f * s, bw))
         NewWorld();
-    if (Button(kStr[STR_DELETE], cx - 154.0f * s, H - 28.0f * s, bw, have))
+    if (Button(LangStr(STR_DELETE), cx - 154.0f * s, H - 28.0f * s, bw, have))
         gPage = PAGE_DELETE;
-    if (Button(kStr[STR_CANCEL], cx + 4.0f * s, H - 28.0f * s, bw) || KeyPressed(VK_ESCAPE))
+    if (Button(LangStr(STR_CANCEL), cx + 4.0f * s, H - 28.0f * s, bw) || KeyPressed(VK_ESCAPE))
         gPage = PAGE_HOME;
     if (play && have)
         PlayWorld(gSelected);
@@ -301,24 +307,52 @@ void DeletePage() {
         gPage = PAGE_WORLDS;
         return;
     }
-    ui::LabelCentered(kStr[STR_DELETE_QUESTION], cx, gF.H * 0.25f, s);
+    ui::LabelCentered(LangStr(STR_DELETE_QUESTION), cx, gF.H * 0.25f, s);
     // "'%s' ..." from the language file
     char line[200];
-    std::string fmt = kStr[STR_DELETE_WARNING];
+    std::string fmt = LangStr(STR_DELETE_WARNING);
     const size_t at = fmt.find("%s");
     if (at != std::string::npos)
         fmt.replace(at, 2, SlotName(gSelected));
     snprintf(line, sizeof(line), "%s", fmt.c_str());
     ui::LabelCentered(line, cx, gF.H * 0.25f + 16.0f * s, s);
     const float bw = 150.0f * s, y = gF.H * 0.25f + 60.0f * s;
-    if (Button(kStr[STR_DELETE], cx - 154.0f * s, y, bw)) {
+    if (Button(LangStr(STR_DELETE), cx - 154.0f * s, y, bw)) {
         const int slot = gSelected;
         gSelected = -1;
         gPage = PAGE_WORLDS;
         DeleteWorld(slot);
     }
-    if (Button(kStr[STR_CANCEL], cx + 4.0f * s, y, bw) || KeyPressed(VK_ESCAPE))
+    if (Button(LangStr(STR_CANCEL), cx + 4.0f * s, y, bw) || KeyPressed(VK_ESCAPE))
         gPage = PAGE_WORLDS;
+}
+
+// Minecraft's language list: click one, and everything Minecraft says changes at once (kept in the ini)
+void LanguagePage() {
+    const float s = gF.s, cx = gF.W * 0.5f, W = gF.W, H = gF.H;
+    GtaBackground(SPR_BACK2);
+    const float top = 32.0f * s, bottom = H - 40.0f * s;
+    TiledDark(top, bottom, MENU_LIST_BG, 110);
+    ui::Image(gMenuTex, MENU_HEADER_SEP, 0, top - 2.0f * s, W, top);
+    ui::Image(gMenuTex, MENU_FOOTER_SEP, 0, bottom, W, bottom + 2.0f * s);
+    ui::LabelCentered(LangStr(STR_LANGUAGE_TITLE), cx, 12.0f * s, s);
+    const float rowH = 18.0f * s, rowW = 220.0f * s, x0 = cx - rowW * 0.5f;
+    for (int l = 0; l < LANG_COUNT; ++l) {
+        const float y = top + 6.0f * s + l * rowH;
+        const bool hover = gF.mx >= x0 && gF.mx < x0 + rowW && gF.my >= y && gF.my < y + rowH - 2.0f * s;
+        if (l == gLanguage) {
+            ui::Rect(x0 - 1.0f * s, y - 1.0f * s, x0 + rowW + 1.0f * s, y + rowH - 1.0f * s, ui::Color(128, 128, 128));
+            ui::Rect(x0, y, x0 + rowW, y + rowH - 2.0f * s, ui::Color(0, 0, 0));
+        }
+        ui::LabelCentered(LanguageName(l), cx, y + 4.0f * s, s, hover ? ui::Color(255, 255, 160) : ui::Color(255, 255, 255));
+        if (hover && gF.click && l != gLanguage) {
+            gLanguage = l;
+            SaveConfigValue("Settings", "Language", LanguageCode(l));
+            PlaySfx(SND_CLICK, nullptr, 0.25f);
+        }
+    }
+    if (Button(LangStr(STR_DONE), cx - 100.0f * s, H - 30.0f * s, 200.0f * s) || KeyPressed(VK_ESCAPE))
+        gPage = PAGE_HOME;
 }
 
 void DrawMenu() {
@@ -355,6 +389,7 @@ void DrawMenu() {
     switch (gPage) {
     case PAGE_WORLDS: WorldsPage(); break;
     case PAGE_DELETE: DeletePage(); break;
+    case PAGE_LANGUAGE: LanguagePage(); break;
     default:
         if (screen == SCR_PAUSE)
             PausePage();

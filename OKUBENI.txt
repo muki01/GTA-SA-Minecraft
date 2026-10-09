@@ -1,9 +1,15 @@
-GTA San Andreas - Minecraft Modu (surum 0.50)
+GTA San Andreas - Minecraft Modu (surum 0.51)
 ============================================
 Orijinal Minecraft dokulari, sesleri, modelleri, Turkce isimleri ve tarifleri kullanilir:
 410 blok, 390 esya, 543 tarif.
 
-0.50 SURUMUNDE YENILER
+0.51 SURUMUNDE YENILER
+- DIL SECIMI: Minecraft'a ait her sey (blok / esya adlari, menuler, envanter sekmeleri, mesajlar, etki adlari, olum ekrani) artik Ingilizce ya da Turkce. Varsayilan dil INGILIZCE.
+- Ana menude ve duraklatma menusunde "Language..." / "Dil..." dugmesi: listeden English ya da Turkce sec, her sey aninda degisir. Secim MinecraftSA.ini'ye (Language=en / tr) kaydedilir.
+- Adlar ve mesajlar Minecraft'in kendi Ingilizce ve Turkce dil dosyalarindan geliyor.
+- MinecraftSA.ini'deki aciklamalar Ingilizce oldu.
+
+0.50 SURUMUNDE GELENLER
 - Yaratici envanter Minecraft'taki gibi: Redstone Bloklari ve Cagirma Yumurtalari sekmeleri eklendi, sekmeler Minecraft'taki yerlerinde.
 - Esyalar gruplu siralaniyor: agaclar turune gore (kutuk, odun, soyulmus, kalas, merdiven, yarim blok, cit), tas aileleri, renkler Minecraft sirasiyla, aletler malzemeye gore.
 - Yanlis sekmedeki esyalar duzeltildi (kovalar, haritalar Aletler'de; mizraklar, at zirhlari Savas'ta; tohumlar Dogal'da; cam ve yun/beton merdivenleri Renkli'de).

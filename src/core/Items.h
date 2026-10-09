@@ -24,7 +24,8 @@ int FireBurn(int id);
 // random ticks: saplings grow, lava sets things on fire, fire spreads and dies
 inline bool IsRandomTicking(int id) { return IsSaplingBlock(id) || id == ID_LAVA || id == ID_FIRE; } // sand, gravel, concrete powder
 inline bool IsOpaqueBlock(int id) { return id > 0 && id < NUM_BLOCKS && Block(id).render == RENDER_OPAQUE && Block(id).shape < SHAPE_STAIRS; }
-const char* ItemName(int id);
+const char* ItemName(int id);  // in the current language
+const char* BlockName(int id);
 int MaxStack(int id);
 int FuelTicks(int id);
 

@@ -70,7 +70,7 @@ void Effects(Pieces& P) {
         P.Sprite(AT_TOP_RIGHT, kEffectIcons[e], bx + 3, by + 3, blink ? Argb(255, 255, 255, 110) : 0xFFFFFFFF);
         static const char* const kRoman[] = { "", " II", " III", " IV", " V", " VI" };
         char name[64], left[16];
-        snprintf(name, sizeof(name), "%s%s", kEffectNames[e], kRoman[std::clamp(st.amp, 0, 5)]);
+        snprintf(name, sizeof(name), "%s%s", EffectName(e), kRoman[std::clamp(st.amp, 0, 5)]);
         const int secs = (int)std::ceil(st.time);
         snprintf(left, sizeof(left), "%d:%02d", secs / 60, secs % 60);
         P.Text(AT_TOP_RIGHT, name, bx - 3, by + 3, 0xFFFFFFFF, true, 2);
@@ -251,11 +251,11 @@ void OpenScreenPieces(Pieces& P, const HudFacts& f) {
         break;
     case SCREEN_CHEST:
         P.Text(AT_WINDOW, ScreenTitle(), 8, 6, labelCol, false, 0);
-        P.Text(AT_WINDOW, "Envanter", 8, 73, labelCol, false, 0);
+        P.Text(AT_WINDOW, LangStr(STR_INVENTORY), 8, 73, labelCol, false, 0);
         break;
     default:
         P.Text(AT_WINDOW, ScreenTitle(), 8, 6, labelCol, false, 0);
-        P.Text(AT_WINDOW, "Envanter", 8, 72, labelCol, false, 0);
+        P.Text(AT_WINDOW, LangStr(STR_INVENTORY), 8, 72, labelCol, false, 0);
         break;
     }
 
@@ -296,7 +296,7 @@ void OpenScreenPieces(Pieces& P, const HudFacts& f) {
     } else {
         int tab = TabAt(f.mouseX, f.mouseY);
         if (tab >= 0)
-            P.Tooltip(kTabNames[tab]);
+            P.Tooltip(TabName(tab));
     }
 }
 
@@ -308,16 +308,16 @@ void DeathScreen(Pieces& P, const HudFacts& f) {
     veil.color = 0x60500000;
     veil.color2 = 0xA0803030;
     veil.scale = t;
-    P.Text(AT_TOP, kStr[STR_YOU_DIED], 0, 60, 0xFFFFFFFF, true, 1).scale = 2.0f;
+    P.Text(AT_TOP, LangStr(STR_YOU_DIED), 0, 60, 0xFFFFFFFF, true, 1).scale = 2.0f;
     // "%1$s died" with the player's name
-    std::string msg = kStr[std::clamp(gGame.deathCause, (int)STR_DEATH_GENERIC, (int)STR_DEATH_STARVE)];
+    std::string msg = LangStr(std::clamp(gGame.deathCause, (int)STR_DEATH_GENERIC, (int)STR_DEATH_STARVE));
     const size_t at = msg.find("%1$s");
     if (at != std::string::npos)
         msg.replace(at, 4, f.playerName);
     P.Text(AT_TOP, msg, 0, 85, 0xFFFFFFFF, true, 1);
     char score[96], num[32];
     snprintf(num, sizeof(num), "%d", gSurvival.xpTotal);
-    std::string sc = kStr[STR_SCORE];
+    std::string sc = LangStr(STR_SCORE);
     const size_t at2 = sc.find("%s");
     if (at2 != std::string::npos)
         sc.erase(at2, 2);
@@ -330,7 +330,7 @@ void DeathScreen(Pieces& P, const HudFacts& f) {
         HudPiece& b = P.Add(HP_SPRITE, AT_QUARTER, -100, 72);
         b.src = MENU_BUTTON_HI;
         b.texture = HT_MENU;
-        P.Text(AT_QUARTER, kStr[STR_RESPAWN], 0, 78, Argb(255, 255, 160), true, 1);
+        P.Text(AT_QUARTER, LangStr(STR_RESPAWN), 0, 78, Argb(255, 255, 160), true, 1);
     }
 }
 } // namespace

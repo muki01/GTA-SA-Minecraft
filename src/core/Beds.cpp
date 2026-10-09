@@ -58,15 +58,15 @@ bool UseBed(const Int3& cell) {
     if (!gSleep.spawnSet || !(gSleep.spawn == foot)) {
         gSleep.spawnSet = true;
         gSleep.spawn = foot;
-        ShowMessage("Doğma noktası ayarlandı");
+        ShowMessage(LangStr(STR_SET_SPAWN));
     }
     Host& h = TheHost();
     if (!CanSleepAt(h.ClockHours()) && !h.Thunderstorm()) {
-        ShowMessage("Yalnızca geceleri ve fırtınada uyuyabilirsin");
+        ShowMessage(LangStr(STR_NO_SLEEP));
         return true;
     }
     if (gGame.gameMode == MODE_SURVIVAL && MonstersNear(foot)) {
-        ShowMessage("Şimdi dinlenemezsin; yakında canavarlar var");
+        ShowMessage(LangStr(STR_NOT_SAFE));
         return true;
     }
     gSleep.asleep = true;
@@ -140,7 +140,7 @@ void BedRespawn() {
     const Int3 above{ gSleep.spawn.x, gSleep.spawn.y, gSleep.spawn.z + 1 };
     if (!FootOf(gSleep.spawn, &foot, &meta) || IsSolidBlock(gWorld.GetBlock(above.x, above.y, above.z))) {
         gSleep.spawnSet = false;
-        ShowMessage("Yatağın yok ya da önü kapalı");
+        ShowMessage(LangStr(STR_NO_SPAWN));
         return;
     }
     TheHost().MovePlayer(Top(foot, meta, 0.5f) + Vec3(0, 0, 1.0f));

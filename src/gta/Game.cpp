@@ -211,7 +211,7 @@ void MilkDrunk(CPlayerPed* ped, bool hadFireResistance) {
     plugin::Command<plugin::Commands::CLEAR_WANTED_LEVEL>(0);
     gFireManager.ExtinguishPoint(ped->GetPosition(), 2.5f);
     FireResistanceCleared(ped, hadFireResistance);
-    ShowMessage("Süt içtin: etkiler ve aranma seviyen sıfırlandı");
+    ShowMessage(Tr("Milk: effects and wanted level cleared", "Süt içtin: etkiler ve aranma seviyen sıfırlandı"));
 }
 
 // ---------------------------------------------------------------- health: armour, totem, hurt flash
@@ -475,7 +475,7 @@ void GameProcess() {
     if (gGame.screen == SCREEN_NONE) {
         if (KeyPressed(gConfig.keyToggleMode)) {
             gGta.enabled = !gGta.enabled;
-            ShowMessage(gGta.enabled ? "Minecraft modu: A\xC3\x87IK" : "Minecraft modu: KAPALI");
+            ShowMessage(gGta.enabled ? Tr("Minecraft mod: ON", "Minecraft modu: AÇIK") : Tr("Minecraft mod: OFF", "Minecraft modu: KAPALI"));
             if (!gGta.enabled)
                 SetGtaHud(false);
         }
@@ -484,11 +484,11 @@ void GameProcess() {
         if (KeyPressed(gConfig.keyRadar)) {
             gConfig.showRadar = !gConfig.showRadar;
             SaveConfigValue("Settings", "ShowRadar", gConfig.showRadar ? "1" : "0");
-            ShowMessage(gConfig.showRadar ? "Harita (radar): A\xC3\x87IK" : "Harita (radar): KAPALI");
+            ShowMessage(gConfig.showRadar ? Tr("Radar: ON", "Harita (radar): AÇIK") : Tr("Radar: OFF", "Harita (radar): KAPALI"));
         }
         if (gGta.enabled && KeyPressed(gConfig.keySteve)) {
             gGta.steve = !gGta.steve;
-            ShowMessage(gGta.steve ? "Karakter: Steve" : "Karakter: CJ");
+            ShowMessage(gGta.steve ? Tr("Character: Steve", "Karakter: Steve") : Tr("Character: CJ", "Karakter: CJ"));
             gWorld.dirty = true;
         }
     }

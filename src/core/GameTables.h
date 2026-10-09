@@ -3,6 +3,7 @@
 
 #include <cstdint>
 
+#include "Lang.h"
 #include "generated/GameData.h"
 
 namespace mc {
@@ -34,7 +35,7 @@ struct BlockDrop {
 
 struct BlockDef {
     const char* key;
-    const char* name;
+    const char* name[LANG_COUNT]; // English, Turkish
     uint16_t tex[6];       // per face (E, W, N, S, top, bottom) for the default orientation
     uint16_t texFrontLit;  // facing blocks: front tile when lit (0xFFFF = none)
     uint8_t shape;
@@ -53,7 +54,7 @@ struct BlockDef {
 
 struct ItemDef {
     const char* key;
-    const char* name;
+    const char* name[LANG_COUNT]; // English, Turkish
     uint16_t tile;
     uint8_t maxStack;
     uint8_t tool;

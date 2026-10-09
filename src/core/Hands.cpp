@@ -155,8 +155,11 @@ void GameKeysTick() {
         return;
     if (ActionPressed(ACT_GAME_MODE)) {
         gGame.gameMode = gGame.gameMode == MODE_SURVIVAL ? MODE_CREATIVE : MODE_SURVIVAL;
-        ShowMessage(gGame.gameMode == MODE_CREATIVE ? "Oyun modu: Yarat\xC4\xB1" "c\xC4\xB1"
-                                                    : "Oyun modu: Hayatta Kalma");
+        std::string msg = LangStr(STR_GAMEMODE_SET); // "Set own game mode to %s"
+        const size_t at = msg.find("%s");
+        if (at != std::string::npos)
+            msg.replace(at, 2, LangStr(gGame.gameMode == MODE_CREATIVE ? STR_CREATIVE : STR_SURVIVAL));
+        ShowMessage(msg);
         gWorld.dirty = true;
     }
     if (ActionPressed(ACT_PERSPECTIVE)) {

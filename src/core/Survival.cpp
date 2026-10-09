@@ -428,7 +428,7 @@ bool HealthTick(float dt, float& health, float maxHealth, float direct, float* h
                 p.glow = true;
                 SpawnParticle(p);
             }
-            ShowMessage("Ölümsüzlük Totemi seni kurtardı!");
+            ShowMessage(Tr("The Totem of Undying saved you!", "Ölümsüzlük Totemi seni kurtardı!"));
             gWorld.dirty = true;
         }
     }
