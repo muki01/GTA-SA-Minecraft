@@ -1,0 +1,13 @@
+# Text files are stored with LF and checked out with the platform's line endings
+* text=auto
+
+# Windows scripts keep CRLF
+*.bat text eol=crlf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.ogg binary
+*.zip binary
+*.dat binary
+*.asi binary
